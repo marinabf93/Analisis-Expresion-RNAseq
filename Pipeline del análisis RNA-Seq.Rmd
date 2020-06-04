@@ -1,0 +1,334 @@
+---
+title: "Pipeline del análisis"
+author: "Marina Ballesteros"
+date: "5/28/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Definición de los datos
+
+El primer paso es leer los archivos __counts.csv__ y __targets.csv__ aportados junto el enunciado de la PEC. 
+El archivo _targets.csv_ es un resumen de cada experinecia donde aparecen informaciones como el grupo, sexo o nombre de la muestra. La columna _group_ de este archivo la tendremos en cuenta en el siguiente paso; existen tres grupos de tiroides:
+
+  -Not infiltrated tissues (NIT)
+  -Small focal infiltrates (SFI)
+  -Extensive lymphoid infiltrates (ELI)
+  
+El archivo _counts.csv_ contiene en sus columnas el nombre de las 293 muestras y cada fila pertenece a un gen diferente.
+
+```{r lectura de los archivos, include=FALSE}
+library(readr)
+targets <- read_csv("targets.csv")
+library(edgeR)
+counts <- readTargets("counts.csv", sep=";")
+```
+
+El siguiente paso es escoger 30 muestras dentro de las 293 muestras posibles, de manera que tengamos 10 muestras de cada uno de los tres grupos de tiroides. Para llevar a cabo esto, necesitamos seleccionar primero 10 muestras de cada grupo a través de la columna _group_ del archivo __targets.csv__. Lo haré con la función _subset_ del paqute __dplyr__; para unir las 30 muestras utilizaré la función _Reduce_.
+
+```{r Selección de las 30 muestras, include=FALSE}
+library(dplyr)
+group_NIT<-subset(targets, Group=="NIT")[1:10,]
+group_SFI<-subset(targets, Group=="SFI")[1:10,]
+group_ELI<-subset(targets, Group=="ELI")[1:10,]
+
+#Unimos los tres data frame creados en uno solo
+targets_30<-Reduce(function(...) merge(...,all=TRUE), list(group_NIT, group_SFI, group_ELI))
+```
+
+Una vez hemos escogido las 30 muestras, extraemos las columnas correspondientes (en el archivo __counts.csv__) a esas 30 filas seleccionadas. 
+
+*Nota*: Para hacer la selección de las columnas del archivo __counts.csv__ primero he extraído todos los _Sample_Name_ del archivo __targets_30__, después los he copiado y modificado los guiones por puntos para que coincidan con los nombres de las columnas del archivo __counts.csv__. Seguramente es una manera muy rudimentaria de hacerlo, pero no conseguí hacerlo de otra forma para cambiar los 30 nombres.
+
+```{r Extracción de las 30 filas seleccionadas anteriormente, include=FALSE}
+#Extraigo los nombres de la columna Sample_Name
+nombres<- sort(targets_30$Sample_Name)
+#Copio y modifico los nombres anteriores en el siguiente comando para
+#seleccionar las 30 columnas en counts
+counts_30<-counts[ , c("GTEX.111CU.0226.SM.5GZXC", "GTEX.111FC.1026.SM.5GZX1", "GTEX.111VG.0526.SM.5N9BW", "GTEX.111YS.0726.SM.5GZY8", "GTEX.1122O.0226.SM.5N9DA", "GTEX.1128S.0126.SM.5H12S", "GTEX.113JC.0126.SM.5EGJW", "GTEX.117XS.0526.SM.5987Q", "GTEX.117YW.0126.SM.5EGGN", "GTEX.117YX.1226.SM.5H11S", "GTEX.1192W.0126.SM.5EGGS", "GTEX.1192X.1126.SM.5EGGU", "GTEX.11DXY.0426.SM.5H12R", "GTEX.11EQ8.0826.SM.5N9FG", "GTEX.11EQ9.0626.SM.5A5K1", "GTEX.11GS4.0826.SM.5986J", "GTEX.11NV4.0626.SM.5N9BR", "GTEX.11O72.2326.SM.5BC7H", "GTEX.11TUW.0226.SM.5LU8X", "GTEX.11XUK.0226.SM.5EQLW", "GTEX.1211K.0726.SM.5FQUW", "GTEX.12584.0826.SM.5FQSK", "GTEX.12BJ1.0426.SM.5FQSO", "GTEX.13NZ9.1126.SM.5MR37", "GTEX.13QJC.0826.SM.5RQKC", "GTEX.14ABY.0926.SM.5Q5DY", "GTEX.14AS3.0226.SM.5Q5B6", "GTEX.14BMU.0226.SM.5S2QA", "GTEX.PLZ4.1226.SM.2I5FE",  "GTEX.R55G.0726.SM.2TC6J")]
+```
+
+# 3. Preprocesado de los datos: filtraje y normalización
+
+Filtraremos los genes (columna X del archivo _counts_30_), reteniendo sólo los genes que se expresen en un número mínimo de muestras (resto de columnas del archivo _counts_30_).
+Para llevar a cabo el filtraje necesitamos el paquete __edgeR__ de Bioconductor.
+
+```{r Descarga del paquete edgeR, include=FALSE}
+BiocManager::install("edgeR")
+```
+
+Para poder trabajar con la tabla de contajes (counts_30), debemos primero convertir el data frame en una matriz y, posteriormente, la matriz en una lista. Gracias a la función __DEGList__ se obtiene un objeto de datos basado en una lista. Además, he añadido el objeto _group_ que contiene el grupo al que pertenece cada muestra por orden de aparcición el el data frame _counts_30_ para identificar cada muestra con el grupo al que pertenece.
+
+```{r Creación de la tabla de contajes, include=FALSE}
+require(edgeR)
+x<- as.matrix(counts_30)
+group<- c("NIT","NIT","ELI","NIT","NIT","NIT","NIT","NIT","SFI","NIT","NIT","NIT","SFI","SFI","SFI","SFI","ELI","SFI","SFI","ELI","SFI","SFI","SFI","ELI","ELI","ELI","ELI","ELI","ELI","ELI")
+y <- DGEList(counts=x, group = group)
+```
+
+## 3.1 Filtración de los genes
+
+Una vez que tenemos el objeto _y_, que es una lista, podemos proceder a la filtración de los genes que no muestren un nivel de expresión significativo en ninguno de los tres grupos con la función _filterByExpr_ del paquete __edgeR__.
+
+Antes de pasar a la filtración, voy a calcular el tamaño de las librerías actualmente, pues nos servirá de referencia ya que después del filtraje el tamaño de estas librerías debería cambiar.
+
+```{r Tamaño librerías antes del filtraje, include=FALSE}
+n_antes<-y$samples$lib.size
+```
+
+Como regla general, los genes se eliminan si no pueden ser expresados en todas las muestras para cualquiera de las condiciones. Por lo general, se requiere que un gen tenga una cuenta de 5-10 en una librería para que se considere expresado en esa librería.
+
+```{r Transformación y filtraje de los conteos, include=FALSE}
+keep <- filterByExpr(y)
+summary(keep)
+
+#Recalculamos el tamaño de la biblioteca del objeto DGEList
+y <- y[keep, , keep.lib.sizes=FALSE]
+```
+
+A través de la filtración hemos pasado de 56202 observaciones (genes) a conservar tan sólo 12352 genes, tal y como se observa en el resumen generado anteriormente. Además, se puede ver que el tamaño de las librerías se ha reducido también.
+
+```{r Tamaño librerías después del filtraje, include=FALSE}
+n_despues<-y$samples$lib.size
+```
+
+## 3.2 Control de calidad de los datos filtrados
+
+El objetivo del control de calidad es revelar posibles problemas técnicos u otros sesgos presentes en los datos. La mejor manera para llevar a cabo un control de calidad es de manera visual. El primer paso, por lo tanto, será representar los datos gráficamente. 
+
+```{r fig.cap="Tamaño de las librerías en las 30 muestras antes y después del filtraje.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+library(plotly)
+df_librerias= data.frame(y$samples, n_antes, n_despues)
+plot_ly(df_librerias, x=y$samples, y= n_antes, name= "ANTES", type = 'bar')%>% add_trace (y= n_despues, name= "DESPUES")
+```
+
+En el gráfico se aprecia que las dimensiones de las librerías varían entre 15 y 70 millones de conteos. Estas enormes diferencias en el tamaño de las diferentes librerías indica que una normalización de los datos es necesaria antes de llevar a cabo los análisis de expresión diferencial.
+Por otro lado, visualmente no se aprecia una diferencia en el tamaño de las librerías antes y después del filtraje; esto es debido a que se han eliminado únicamente los genes con pocos o nulos conteos, haciendo que el total de lecturas en cada librería no varíe enormemente.
+
+
+Por último, procedemos a la __normalización__ de los datos. El paquete __edgeR__ se ocupa del análisis de la expresión diferencial más que de la cuantificación de los niveles de expresión. Es decir, se ocupa de los cambios relativos en los niveles de expresión entre las condiciones. Por esta razón, los problemas de normalización se plantean sólo en la medida en que los factores técnicos tienen efectos específicos en la muestra.
+
+Hay dos factores técnicos que pueden afectar a los recuentos de lectura de expresión diferencial: 
+  
+  __La profundidad de secuenciación de cada muestra de ARN__. El paquete _edgeR_ ajusta automáticamente cualquier análisis de expresión diferencial para variar las profundidades de secuenciación, representadas por diferentes tamaños de biblioteca.
+  __La producción total de ARN por célula__. Esto suele ser importante cuando un pequeño número de genes se expresan en gran medida en una muestra, pero no en otra. Este efecto provoca que los genes altamente expresados consuman una proporción sustancial del tamaño total de la biblioteca, lo que hace que los genes restantes no estén suficientemente muestreados en esa muestra.
+  
+Como el primer factor se corrige automáticamente con el paquete _edgeR_, debemos corregir el segundo factor a través de la función __calcNormFactors__. Esta función encontrará un conjunto de factores de escala para los tamaños de las bibliotecas con el fin de minimizar los cambios de pliege entre las muestras para la mayoría de genes.
+El método por defecto para calcular estos factores de escala utiliza una media recortada de valores M (TMM) entre cada par de muestras. La multiplicación del tamaño original de la biblioteca por el factor de escala se llamará el tamaño efectivo de la biblioteca, que sustituye al tamaño original de la biblioteca en todos los análisis.
+
+En este caso usaremos el método por defecto, Trimmed Mean of M-values (TMM); ya que observando un poco los datos del archivo _counts_30_ se ve que el recuento total de lecturas depende en gran medida de unas pocas transcripciones altamente expresadas.
+
+```{r Normalización de la muestra, include=FALSE}
+y <- calcNormFactors(y)
+y$samples
+```
+
+Vemos que los factores de normalización han cambiado. Un factor de normalización inferior a uno indica que un pequeño número de genes de alto recuento monopoliza la secuencia, lo que hace que los recuentos de otros genes sean inferiores a lo que sería habitual dado el tamaño de la biblioteca. Como resultado, el tamaño de la biblioteca se reducirá, de forma análoga a la escalada de los recuentos al alza en esa biblioteca. Por el contrario, un factor superior a uno aumenta el tamaño de la biblioteca, aumentando los recuentos que se veían enmascarados.
+
+El rendimiento del procedimiento de normalización de la TMM puede examinarse mediante gráficos de diferencia media (plot MD). Esto visualiza el cambio de pliegue ajustado al tamaño de la biblioteca entre dos librerías (la diferencia) contra el promedio de la expresión de log a través de esas librerías (la media). El plot MD de pliegue se genera comparando la muestra 1 (GTEX.111CU.0226.SM.5GZXC) con una librería artificial construida a partir de la media de todas las demás muestras.
+Lo ideal sería que el grueso de los genes se centrara en un cambio de pliegue en torno a cero, lo que indicaría que se ha eliminado con éxito cualquier sesgo de composición entre las librerías. 
+
+```{r plotMD, echo=FALSE}
+plotMD(cpm(y, log=TRUE), column=1)
+abline(h=0, col="red", lty=2, lwd=2)
+```
+
+```{r MAplot}
+x_MA = pseudoCount[, 1]
+y_MA = pseudoCount[, 2]
+## M-values
+M=x_MA-y_MA 
+## A-values
+A = (x_MA + y_MA)/2
+df_MA = data.frame(A, M)
+ggplot(df_MA, aes(x = A, y = M)) + geom_point(size = 1.5, alpha = 1/5) +
+geom_hline(color = "blue3") + stat_smooth(se = FALSE, method = "loess", color = "red3")
+```
+
+
+# 3. Identificación de genes diferencialmente expresados
+
+## 3.1 Exploración de los datos
+
+Antes de empezar con el análisis de expresión diferencial, podemos dibujar un plot MDS donde se representan las similitudes relativas de las 30 muestras en función del tipo de infiltración existente en el tiroides. Las similitudes se cuantifican en forma de cambios de pliegue (log folg change) entre muestras.
+
+```{r plotMDS, echo=FALSE}
+plotMDS(y, col=rep(1:3, each=10), main="Mapa conceptual del tiroides")
+legend("bottomright", col = c("green", "red", "black"), legend = c("ELI", "SFI", "NIT"), lwd=0.5, bty = "n")
+```
+
+Existe una tendencia de agrupación entre los tres grupos, lo que muestra un efecto según el tipo de infiltración:
+
+  -El grupo __ELI__ (verde) esta mayoritariamente situado a la derecha del gráfico
+  -El grupo __NIT__ (negro) se concentra en la parte izquierda del gráfico
+  -El grupo __SFI__ (rojo) se acumula en la aprte izquierda superior
+
+
+## 3.2 Matriz de diseño
+
+La matriz de diseño contiene los predictores para cada muestra; en la matriz se asigna un coeficiente a cada grupo. En este análisis, nos interesan las diferencias entre los tres tipos de infiltración. Por lo tanto, creamos una matriz de diseño utilizando el factor _tipo de infiltración_.
+
+```{r Matriz de diseño, echo=FALSE}
+grupos<- y$samples$group
+design <- model.matrix(~0+grupos)
+colnames(design) <- levels(grupos)
+design
+```
+
+## 3.3 Estimación de la dispersión
+
+Para experimentos con un solo factor, como en este caso (tipo de infiltración), el paquete __edgeR__ utiliza el método de máxima probabilidad condicional ajustada por cuantiles (qCML). El método qCML calcula la probabilidad condicionándose a los recuentos totales de cada etiqueta, y utiliza pseudocuentas después de ajustar los tamaños de las bibliotecas. 
+
+Estimamos la dispersión del __modelo negativo binomial__ (NB) usando la función _estimateDisp_. La estimación se robustece contra los potenciales genes atípicos. Dicha función devuelve el objeto DGEList con entradas adicionales para las dispersiones NB estimadas para todos los genes. Estas estimaciones pueden ser visualizadas con el plotBCV, que muestra el coeficiente biológico de variación de cada gen.
+
+```{r Estimación de la dispersión, echo=FALSE}
+y <- estimateDisp(y, design, robust=TRUE)
+y$common.dispersion
+plotBCV(y)
+```
+
+
+Luego estimamos las dispersiones de cuasi-probabilidad (QL) alrededor de la tendencia de dispersión usando la función _glmQLFit_. Esta función devuelve un objeto DGEGLM que contiene los valores estimados de los coeficientes GLM para cada gen, así como la tendencia de dispersión de la media ajustada de QL, las estimaciones de QL ajustadas y los grados de libertad previos (df). Se recomienda utilizar el argumento "robust=TRUE" ya que identifica los genes que son atípicos de la tendencia de dispersión media NB.
+Estos pueden ser visualizados con la función _plotQLDisp_.
+
+```{r dispersiones QL, echo=FALSE}
+fit <- glmQLFit(y, design, robust=TRUE) 
+head(fit$coefficients)
+plotQLDisp(fit)
+```
+  
+## 3.3 Expresión diferencial
+
+En este estudio hay un interés en comparar los tres tipos de grupos entre sí, por lo que debemos hacer tres contrastes:
+
+  -SFI vs NIT
+  -ELI vs NIT
+  -ELI vs SFI
+
+Para poder llevar a cabo un contraste entre más de dos grupos, recurrimos al análisis unidireccional de varianza (ANOVA) para cada gen. Para ello, debemos crear primero una matriz de contrastes, donde cada columna representa un contraste entre dos grupos de interés.
+
+```{r Matriz de contrastes, include=FALSE}
+con <- makeContrasts(
+SFIvsNIT = SFI - NIT,
+ELIvsNIT = ELI - NIT,
+ELIvsSFI = ELI - SFI, levels=design)
+```
+
+La función _glmQLFTest_ lleva a cabo la prueba de cuasi-probabilidad (QL) del test F que se aplica para identificar los genes que se expresan diferencialmente entre los tres grupos. Esto combina las tres comparaciones por pares en un solo estadístico F y un p-valor. La lista de genes más significativos puede obtenerse con la función _topTags_.
+
+```{r Identificación de genes diferencialmente expresados, echo=FALSE}
+anov <- glmQLFTest(fit, contrast=con)
+topTags(anov)
+```
+
+# 4.Anotación de los resultados
+
+Los símbolos de genes disponibles para los humanos también pueden ser añadidos para complementar los identificadores de __Entrez__ para cada gen, usando la anotación en el paquete __org.Hs.eg.db__.
+
+```{r Anotación, include=FALSE}
+require(org.Hs.eg.db)
+Symbol <- mapIds(org.Hs.eg.db, keys=rownames(y), keytype="ENTREZID", column="SYMBOL")
+y$genes <- data.frame(Symbol=Symbol)
+```
+
+# 5.Búsqueda de patrones de expresión y agrupación de las muestras
+
+En este análisis se han realizado tres contrastes con el fin de comparar los tres tipos de infiltración entre sí. El objetivo es extraer los genes que cambian simultáneamente entre las distintas comparaciones.
+
+Para anotar y contar los genes que cambian en una o más condiciones se utiliza la función __decideTest__ del paquete _limma_. Esta función nos devolverá una tabla llamada __res__ cuya interpretación es la siguiente:
+
+  + 1: El gen esta sobreexpresado (Up)
+  + 0: No hay cambio significativo en la expresión del gen (NotSig)
+  + -1: El gen ha bajado su expresión (Down)
+
+```{r decideTests.1, include=FALSE}
+library(limma)
+res<-decideTests(anov, method="separate", adjust.method="fdr", p.value=0.1, lfc=1)
+```
+
+A continuación se muestra un resumen de la tabla _res_ obtenida.
+
+```{r resumeDecideTests, echo=FALSE}
+#Resumen de la tabla
+sum.res.rows<-apply(abs(res),1,sum)
+res.selected<-res[sum.res.rows!=0,] 
+print(summary(res))
+```
+
+# 6.Análisis de significación biológica
+
+El análisis de enriquecimiento biológico (GEA) sirve para interpretar los resultados de la expresión diferencial en un contexto biológico. Su objetivo es identificar las funciones, rutas metabólicas o procesos biológicos donde interviene los genes seleccionados como más diferencialmente expresados.
+
+En este caso, se identificarán los términos GO que están sobrerrepresentados en los tres grupos: ELI, SFI y NIT. Esto es posible aplicando la función __goana__ a los resultados de expresión diferencial de estas comparaciones. Con la función __topGo__ obtendremos una tabla con los 20 términos GO más enriquecidos en los tres grupos.
+
+```{r Gene Set Enrichment Analysis, include=FALSE}
+qlf <- glmQLFTest(fit, contrast=con)
+go <- goana(qlf, species = "Hs")
+```
+
+```{r topTable GEO}
+topGO(go, n=20)
+```
+
+Los nombres de las filas de la salida son los identificadores universales de los términos GO, con un término por fila. Para entender bien el resultado obtenido, haré una descripción de lo que representa cada columna de la tabla:
+
+  __Term__: Nombra los términos GO
+  __Ont__: Conjunto de dominios o tipos de términos
+              -BP: Proceso Biológico
+              -CC: Componente Celular
+              -MF: Función Molecular
+  __N__: Número total de genes que se anotan en cada término GO
+  __DE__: Número de genes correspondiente a dicho término GO que están diferencialmente 
+          expresados
+  __P.DE__: Contiene los valores p para la sobrerrepresentación del término GO en el                conjunto de genes
+  
+La tabla de salida está ordenada por orden ascendente del p-valor.
+
+## 6.1 Probando conjuntos de genes (Gene Set Testing)
+
+Para profundizar un poco más en el análisis de enriquecimiento biológico, se puede utilizar la prueba del conjunto de genes de rotación: __ROAST__. Dado un conjunto de genes, podemos probar si la mayoría de los genes del conjunto están diferencialmente expresados a través del contraste o contrastes de interés. Es útil cuando el conjunto especificado contiene todos los genes involucrados en alguna vía o proceso.
+
+Para este caso concreto, me interesaré en dos términos GO relacionados con la actividad del receptor; puesto que son los dos primeros términos obtenidos en la tabla anterior. Cada término se usará para definir un conjunto que contenga todos los genes que están anotados con ese término.
+
+```{r Selección de los conjuntos de genes, include=FALSE}
+library(GO.db)
+cyt.go <- c("GO:0004896", "GO:0004879")
+term <- select(GO.db, keys=cyt.go, columns="TERM") 
+```
+
+Construimos una lista de dos componentes, cada uno de los cuales es un vector de las identificaciones __Entrez__ de los genes para todos los genes anotados con uno de los términos GO. Luego convertimos las IDs de los genes en índices de fila del objeto _fit_ usando la función __ids2indices__.
+
+```{r Lista de componentes de los GO seleccionados, include=FALSE}
+Rkeys(org.Hs.egGO2ALLEGS) <- cyt.go
+ind <- ids2indices(as.list(org.Hs.egGO2ALLEGS), row.names(fit))
+```
+
+Procederemos a ejecutar el test __ROAST__ en los conjuntos de genes definidos para el contraste de interés. Supongamos que la comparación de interés es entre los grupos ELI (Extensive lymphoid infiltrates) y NIT (not infiltrated tissues). Usamos la función __fry__ para probar múltiples conjuntos de genes.
+
+```{r test ROAST, echo=FALSE}
+con_ELIvsNIT <- makeContrasts(ELI-NIT, levels=design)
+fr <- fry(y, index=ind, design=design, contrast=con_ELIvsNIT)
+fr
+```
+
+Cada fila del objeto _fry_ corresponde a un único conjunto de genes; en este caso de cada término GO. Al igual que con la tabla _go_, explicaré cada columna de la tabla __fry__ para entenderla mejor:
+
+  __NGenes__: Número de genes en cada conjunto de genes
+  __Direction__: Es la dirección neta del cambio, esta se determina a partir de la                       importancia de los cambios en cada dirección
+  __PValue__: Sirve para determinar si la mayoría de los genes del conjunto se expresan               diferencialmente en la dirección especificada
+  __FDR__: Este estadístico se calcula a partir de los correspondientes p-valores en               todos los conjuntos
+  __PValue.Mixed__: Prueba la expresión diferencial en cualquier dirección
+
+Para finalizar, se puede representar visualmente el resultado anterior a través de la función __barcodeplot__. Esta función permite visualizar los resultados de cualquier conjunto; en este caso, he escogido el conjunto de genes definido por _GO:0004896_.
+
+Los genes están representados por barras y se clasifican de izquierda a derecha disminuyendo el cambio de pliegue, formando así el patrón de código de barras. La línea sobre el código de barras muestra el enriquecimiento local relativo de las barras verticales en cada parte del gráfico. Este gráfico en particular sugiere que la mayoría de los genes de este conjunto están down-regulated en el grupo ELI en comparación con el grupo NIT.
+
+```{r BarcodePlot ELIvsNIT, echo=FALSE}
+res_ELIvsNIT <- glmQLFTest(fit, contrast=con_ELIvsNIT)
+barcodeplot(res_ELIvsNIT$table$logFC, ind[[1]], main=names(ind)[1])
+```
+
+
