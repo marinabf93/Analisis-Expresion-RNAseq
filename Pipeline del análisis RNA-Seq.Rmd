@@ -11,23 +11,34 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # 1. Definición de los datos
 
-El primer paso es leer los archivos __counts.csv__ y __targets.csv__ aportados junto el enunciado de la PEC. 
-El archivo _targets.csv_ es un resumen de cada experinecia donde aparecen informaciones como el grupo, sexo o nombre de la muestra. La columna _group_ de este archivo la tendremos en cuenta en el siguiente paso; existen tres grupos de tiroides:
+Antes de empezar el análisis, crearé tres carpetas en el directorio principal de trabajo para facilitar el manejo de los datos, figuras y resultados que se vayan obteniendo. Estas carpetas serán __data__, __figures__ y __results__.
+
+```{r CreateFolders, warning=FALSE, include=FALSE}
+setwd(".")
+dir.create("data")
+dir.create("results")
+dir.create("figures")
+```
+
+El primer paso es leer los archivos __counts.csv__ y __targets.csv__ aportados junto el enunciado de la PEC, ambos archivos están ubicados en una la __data__ en el directorio principal de trabajo.
+
+El archivo _targets.csv_ es un resumen de cada experinecia donde aparecen informaciones como el grupo, sexo o nombre de la muestra. La columna _group_ de este archivo nos informa de los tres grupos de muestras existentes:
 
   -Not infiltrated tissues (NIT)
   -Small focal infiltrates (SFI)
   -Extensive lymphoid infiltrates (ELI)
   
-El archivo _counts.csv_ contiene en sus columnas el nombre de las 293 muestras y cada fila pertenece a un gen diferente.
+El archivo _counts.csv_ contiene en sus columnas el nombre de las 292 muestras y cada fila pertenece a un gen diferente.
 
 ```{r lectura de los archivos, include=FALSE}
 library(readr)
-targets <- read_csv("targets.csv")
+targets <- read_csv("./data/targets.csv")
 library(edgeR)
-counts <- readTargets("counts.csv", sep=";")
+counts <- readTargets("./data/counts.csv", sep=";")
 ```
 
-El siguiente paso es escoger 30 muestras dentro de las 293 muestras posibles, de manera que tengamos 10 muestras de cada uno de los tres grupos de tiroides. Para llevar a cabo esto, necesitamos seleccionar primero 10 muestras de cada grupo a través de la columna _group_ del archivo __targets.csv__. Lo haré con la función _subset_ del paqute __dplyr__; para unir las 30 muestras utilizaré la función _Reduce_.
+El siguiente paso es escoger 30 muestras dentro de las 292 muestras posibles, de manera que tengamos 10 muestras de cada uno de los tres grupos de tiroides. Para llevar a cabo esto, necesitamos seleccionar primero 10 muestras de cada grupo a través de la columna _group_ del archivo __targets.csv__. 
+La selección la haré con la función _subset_ del paqute __dplyr__; a continuación, para unir las 30 muestras utilizaré la función _Reduce_.
 
 ```{r Selección de las 30 muestras, include=FALSE}
 library(dplyr)
@@ -49,67 +60,185 @@ nombres<- sort(targets_30$Sample_Name)
 #Copio y modifico los nombres anteriores en el siguiente comando para
 #seleccionar las 30 columnas en counts
 counts_30<-counts[ , c("GTEX.111CU.0226.SM.5GZXC", "GTEX.111FC.1026.SM.5GZX1", "GTEX.111VG.0526.SM.5N9BW", "GTEX.111YS.0726.SM.5GZY8", "GTEX.1122O.0226.SM.5N9DA", "GTEX.1128S.0126.SM.5H12S", "GTEX.113JC.0126.SM.5EGJW", "GTEX.117XS.0526.SM.5987Q", "GTEX.117YW.0126.SM.5EGGN", "GTEX.117YX.1226.SM.5H11S", "GTEX.1192W.0126.SM.5EGGS", "GTEX.1192X.1126.SM.5EGGU", "GTEX.11DXY.0426.SM.5H12R", "GTEX.11EQ8.0826.SM.5N9FG", "GTEX.11EQ9.0626.SM.5A5K1", "GTEX.11GS4.0826.SM.5986J", "GTEX.11NV4.0626.SM.5N9BR", "GTEX.11O72.2326.SM.5BC7H", "GTEX.11TUW.0226.SM.5LU8X", "GTEX.11XUK.0226.SM.5EQLW", "GTEX.1211K.0726.SM.5FQUW", "GTEX.12584.0826.SM.5FQSK", "GTEX.12BJ1.0426.SM.5FQSO", "GTEX.13NZ9.1126.SM.5MR37", "GTEX.13QJC.0826.SM.5RQKC", "GTEX.14ABY.0926.SM.5Q5DY", "GTEX.14AS3.0226.SM.5Q5B6", "GTEX.14BMU.0226.SM.5S2QA", "GTEX.PLZ4.1226.SM.2I5FE",  "GTEX.R55G.0726.SM.2TC6J")]
+#Creo el objeto group para recopilar el grupo al que pertenece cada muestra 
+group<- c("NIT","NIT","ELI","NIT","NIT","NIT","NIT","NIT","SFI","NIT","NIT","NIT","SFI","SFI","SFI","SFI","ELI","SFI","SFI","ELI","SFI","SFI","SFI","ELI","ELI","ELI","ELI","ELI","ELI","ELI")
 ```
 
-# 3. Preprocesado de los datos: filtraje y normalización
+# 2. Preprocesado de los datos: filtraje y normalización
 
-Filtraremos los genes (columna X del archivo _counts_30_), reteniendo sólo los genes que se expresen en un número mínimo de muestras (resto de columnas del archivo _counts_30_).
+## 2.1 Filtración de los genes
+
+Filtraremos los genes reteniendo sólo aquellos genes que se expresen en todas las muestras y con un número mínimo de contajes. El proceso de filtraje es muy importante ya que los genes con recuentos muy bajos en las librerías no proporcionan apenas pruebas de expresión diferencial y, además, interfieren de forma negativa en algunas aproximaciones estadísticas. En consecuecia, estos genes con bajos conteos reducen el poder de detección de los genes de expresión diferencial y por ello es importante eliminarlos.
+
 Para llevar a cabo el filtraje necesitamos el paquete __edgeR__ de Bioconductor.
 
 ```{r Descarga del paquete edgeR, include=FALSE}
 BiocManager::install("edgeR")
 ```
 
-Para poder trabajar con la tabla de contajes (counts_30), debemos primero convertir el data frame en una matriz y, posteriormente, la matriz en una lista. Gracias a la función __DEGList__ se obtiene un objeto de datos basado en una lista. Además, he añadido el objeto _group_ que contiene el grupo al que pertenece cada muestra por orden de aparcición el el data frame _counts_30_ para identificar cada muestra con el grupo al que pertenece.
+Hay distintas formas de filtrar los genes de baja expresión pero antes se deben transformar los conteos con el fin de tener en una misma escala todas las muestras de un mismo estudio y evitar, así, diferencias debido al distinto tamaño de las librerías. La transformación se realizará con la conversión de los conteos a CPM (conteos por millón) a través de la función __cpm__.
 
-```{r Creación de la tabla de contajes, include=FALSE}
-require(edgeR)
-x<- as.matrix(counts_30)
-group<- c("NIT","NIT","ELI","NIT","NIT","NIT","NIT","NIT","SFI","NIT","NIT","NIT","SFI","SFI","SFI","SFI","ELI","SFI","SFI","ELI","SFI","SFI","SFI","ELI","ELI","ELI","ELI","ELI","ELI","ELI")
-y <- DGEList(counts=x, group = group)
+En este estudio por cada grupo existen 10 réplicas biológicas, ya que el tamaño de muestra de cada grupo es 10. Por este motivo, estableceré un umbral mínimo de conteos por millón (CPM) en al menos 10 muestras; es decir, favoreceré un filtraje donde los genes estén representados al menos una vez en todas las muestras en cada grupo.
+
+El segundo umbral que podemos marcar para el filtraje es un mínimo de conteos por millón para cada gen. Para obtener el número de conteos por millón utilizaré la función __cpm__ del paquete _edgeR_. Esta función permite convertir los contajes a CPMs, por lo tanto, se están normalizando los conteos para las diferentes profundidades de secuenciación de cada muestra.
+
+```{r Obtención de los CPMs, include=FALSE}
+myCPM <- cpm(counts_30)
+head(myCPM)
 ```
 
-## 3.1 Filtración de los genes
+Por regla general, se puede elegir un buen umbral mínimo de CPMs identificando el CPM que corresponde a un conteo de 10. Contrastando las tablas __counts_30__ y __myCPM__, se observa que el umbral en este caso es aproximadamente 0,15. Con la selección de genes que superen el umbral de 0,15 se obtiene una matriz lógica con los genes que han superado el umbral (TRUE) y los genes que estan por debajo del umbral (FALSE).
 
-Una vez que tenemos el objeto _y_, que es una lista, podemos proceder a la filtración de los genes que no muestren un nivel de expresión significativo en ninguno de los tres grupos con la función _filterByExpr_ del paquete __edgeR__.
-
-Antes de pasar a la filtración, voy a calcular el tamaño de las librerías actualmente, pues nos servirá de referencia ya que después del filtraje el tamaño de estas librerías debería cambiar.
-
-```{r Tamaño librerías antes del filtraje, include=FALSE}
-n_antes<-y$samples$lib.size
+```{r}
+# Seleccionamos los valores CPM mayores al umbral
+thresh <- myCPM > 0.15
+# Se crea una matriz lógica de TRUE y FALSE
+head(thresh)
 ```
 
-Como regla general, los genes se eliminan si no pueden ser expresados en todas las muestras para cualquiera de las condiciones. Por lo general, se requiere que un gen tenga una cuenta de 5-10 en una librería para que se considere expresado en esa librería.
+Una vez he filtrado los genes, hago un resumen con los genes que tienen un valor CPM superior al valor umbral. Dentro de los genes seleccionados como _TRUE_, seleccionaré los genes que tienen al menos 10 valores TRUE para cada gen; es decir, me quedaré con los genes que tengan representación en todas las muestras del grupo.
 
-```{r Transformación y filtraje de los conteos, include=FALSE}
-keep <- filterByExpr(y)
+Una vez los dos umbrales han sido aplicados, selecciono los genes con una mayor expresión y estos serán los únicos conteos que conservaré para posteriores análisis. En este caso partimos de 56202 genes y tan solo conservaré 22990 genes tras la filtración.
+
+```{r}
+table(rowSums(thresh))
+# Mantengo los genes con al menos 10 TRUES en cada fila
+keep <- rowSums(thresh) >= 10
+# Mantengo solo los genes con mayor expresión
+counts.keep <- counts_30[keep,]
 summary(keep)
-
-#Recalculamos el tamaño de la biblioteca del objeto DGEList
-y <- y[keep, , keep.lib.sizes=FALSE]
+dim(counts.keep)
 ```
 
-A través de la filtración hemos pasado de 56202 observaciones (genes) a conservar tan sólo 12352 genes, tal y como se observa en el resumen generado anteriormente. Además, se puede ver que el tamaño de las librerías se ha reducido también.
+Una vez he realizado el filtraje, debo convertir los conteos en un objeto de la clase __DEGList__; este objeto es propio del paquete _edgeR_ y sirve para almacenar datos de conteos con los parámetros que se consideren pertinentes. En este caso sólo añadiré como parámetro la clasificación de las muestras en el grupo correspondiente gracias al objeto _group_ creado junto con la tabla de conteos _counts_30_.
 
-```{r Tamaño librerías después del filtraje, include=FALSE}
-n_despues<-y$samples$lib.size
+```{r Creación del objeto DEGList, include=FALSE}
+y <- DGEList(counts.keep, group = group)
+# Muestras del obtejo DEGList
+names(y)
+# Información del tamaño de las librerías en cada muestra
+y$samples
 ```
+
 
 ## 3.2 Control de calidad de los datos filtrados
 
 El objetivo del control de calidad es revelar posibles problemas técnicos u otros sesgos presentes en los datos. La mejor manera para llevar a cabo un control de calidad es de manera visual. El primer paso, por lo tanto, será representar los datos gráficamente. 
 
-```{r fig.cap="Tamaño de las librerías en las 30 muestras antes y después del filtraje.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
-library(plotly)
-df_librerias= data.frame(y$samples, n_antes, n_despues)
-plot_ly(df_librerias, x=y$samples, y= n_antes, name= "ANTES", type = 'bar')%>% add_trace (y= n_despues, name= "DESPUES")
+El primer gráfico será una representación de los tamaños de la biblioteca con un gráfico de barras para ver si hay grandes discrepancias entre las muestras más fácilmente. 
+Para que la identificación de las muestras sea más fácil, he creado la variable __ShortName__ a partir del archivo _targets_30_ en el que se identifican las muestras con un nombre más corto que el nombre original.
+El gráfico quedará registrado en la carpeta __figures__ bajo el nombre _Barplot_librerias_.
+
+```{r fig.cap="Barplot que representa el tamaño de las librerías de cada muestra.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}}
+ShortName = c("111CU_NIT", "111FC_NIT", "111VG_ELI", "111YS_NIT", "1122O_NIT", "1128S_NIT", "113JC_NIT", "117XS_NIT", "117YW_SFI", "117YX_NIT", "1192W_NIT", "1192X_NIT", "11DXY_SFI", "11EQ8_SFI", "11EQ9_SFI", "11GS4_SFI", "11NV4_ELI", "11O72_SFI", "11TUW_SFI", "11XUK_ELI", "1211K_SFI", "12584_SFI", "12BJ1_SFI", "13NZ9_ELI", "13QJC_ELI", "14ABY_ELI", "14AS3_ELI", "14BMU_ELI", "PLZ4-_ELI", "R55G-_ELI")
+barplot(y$samples$lib.size*1e-6, names=ShortName, las=2, col = "lightblue", ylab = "Tamaño de las librerías (millones)")
+title("Barplot del tamaño de las librerías")
+```
+```{r saveBarplotLibrerías, echo=FALSE, results='hide'}
+#Guardo el barplot en un archivo tiff en el directorio figures
+tiff("./figures/Barplot_librerias.tiff", res = 200, width = 4, height = 4, units = 'in')
+barplot(y$samples$lib.size*1e-6, names=ShortName, las=2, col = "lightblue", ylab = "Tamaño de las librerías (millones)")
+title("Barplot del tamaño de las librerías")
+dev.off()
 ```
 
-En el gráfico se aprecia que las dimensiones de las librerías varían entre 15 y 70 millones de conteos. Estas enormes diferencias en el tamaño de las diferentes librerías indica que una normalización de los datos es necesaria antes de llevar a cabo los análisis de expresión diferencial.
-Por otro lado, visualmente no se aprecia una diferencia en el tamaño de las librerías antes y después del filtraje; esto es debido a que se han eliminado únicamente los genes con pocos o nulos conteos, haciendo que el total de lecturas en cada librería no varíe enormemente.
+En el gráfico se aprecia que las dimensiones de las librerías varían entre 15 y 70 millones de conteos. Estas enormes diferencias en el tamaño de las librerías indica que una normalización de los datos es necesaria antes de llevar a cabo los análisis de expresión diferencial.
+
+Los datos de conteo no están distribuidos normalmente, así que si queremos examinar las distribuciones de los conteos en bruto necesitamos convertir los conteos en logaritmos. Una vez los conteos estén trnaformados en logaritmos, usaré gráficos de caja para comprobar la distribución de los recuentos leídos en la escala log2. La función __cpm__ me ayudará a obtener los recuentos log2 por millón, que se corrigen para los diferentes tamaños de las librerías. La función __cpm__ también añade un pequeño desplazamiento para evitar tomar el logaritmo de cero.
+
+```{r fig.cap="Boxplot de las dsitribuciones de las librerías.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+# Log2 de los CPM
+logcounts <- cpm(y,log=TRUE)
+# Comprobamos la distribución de las muestras
+boxplot(logcounts, xlab="", ylab="Log2 conteos por millón",las=2)
+# Añadimos la línea azul que marca la medians de logCPM 
+abline(h=median(logcounts),col="blue")
+title("Boxplots de los logCPMs (no normalizados)")
+```
 
 
-Por último, procedemos a la __normalización__ de los datos. El paquete __edgeR__ se ocupa del análisis de la expresión diferencial más que de la cuantificación de los niveles de expresión. Es decir, se ocupa de los cambios relativos en los niveles de expresión entre las condiciones. Por esta razón, los problemas de normalización se plantean sólo en la medida en que los factores técnicos tienen efectos específicos en la muestra.
+De los 30 boxplots, vemos que en general las distribuciones de densidad de las intensidades logarítmicas brutas no son idénticas pero aún así no muy diferentes. Si una muestra está realmente muy por encima o por debajo de la línea horizontal azul, se necesitaría entonces investigar esa muestra más a fondo.
+Los puntos dibujados más allá de los extremos de las cajas corresponden a valores outliers. El Boxplot esta registrado en el directorio __figures__ bajo el nombre de _Boxplot_librerias_.
+
+```{r saveBoxplot, echo=FALSE, results='hide'}
+#Guardo el boxplot en un archivo tiff en el directorio figures
+tiff("./figures/Boxplot_librerias.tiff", res = 200, width = 4, height = 4, units = 'in')
+boxplot(logcounts, xlab="", ylab="Log2 conteos por millón",las=2)
+abline(h=median(logcounts),col="blue")
+title("Boxplots de los logCPMs (no normalizados)")
+dev.off()
+```
+
+El siguiente gráfico que llevaré a cabo en este control de calidad visual es un __Mapa de color__. Este tipo de gráficos sirven para agrupar las muestras en base a algún método jerárquico. Por lo tanto, las muestras que se encuentren juntas serán las muestras más similares entre sí.
+El Hetatmap se ha registrado en el directorio __figures__ bajo en nombre de _Heatmap.png_.
+
+```{r fig.cap="Mapa de color para cada muestra en cada grupo.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center" }
+require(mixOmics)
+require(RColorBrewer)
+mat.dist = logcounts
+colnames(mat.dist) = ShortName 
+mat.dist = as.matrix(dist(t(mat.dist)))
+mat.dist = mat.dist/max(mat.dist)
+hmcol = colorRampPalette(brewer.pal(9, "GnBu"))(16)
+cim(mat.dist, color = rev(hmcol), symkey = FALSE, margins = c(9, 9))
+```
+
+En el _Heatmap_ no existe una clara agrupación entre los tres grupos, el grupo que más agrupado se encuentra es el _ELI_ en la parte inferior del eje y. Por el contrario, las muestras de los grupos _SFI_ y _NIT_ están entremezcladas.
+Según la escala de colores, el color azul representaría los genes que no han cambiado su expresión ; mientras que el color verde representa los genes que si han aumentado su expresión. Esto no hace indicar que en la inmensa mayoría de los casos, los genes de las diferentes muestras han sufrido un aumento en su expresión, veremos si esta predicción se corresponde más adelante con el análisis de expresión diferencial.
+
+```{r SaveHeatmap, echo=FALSE, results='hide',fig.height=5, fig.width=5}
+#Guardo el Heatmap en un archivo tiff en el directorio figures
+tiff("./figures/Heatmap.png", res = 200, width = 4, height = 4, units = 'in')
+require(mixOmics)
+require(RColorBrewer)
+mat.dist = logcounts
+colnames(mat.dist) = paste(colnames(mat.dist), sep = " : ") 
+mat.dist = as.matrix(dist(t(mat.dist)))
+mat.dist = mat.dist/max(mat.dist)
+hmcol = colorRampPalette(brewer.pal(9, "GnBu"))(16)
+cim(mat.dist, color = rev(hmcol), symkey = FALSE, margins = c(9, 9))
+dev.off()
+```
+
+Para acabar con este control de calidad visual, representaré un __Plot de componentes principales (PCA)__. Este tipo de gráficos es útil para visualizar el efecto global de las covariables experimentales y los efectos de los lotes. En este análisis, el plot PCA agrupa las muestras por grupos de los genes más significativamente desregulados. Debido a que en este estudio existe un único factor con tres niveles: SFI, NIT y ELI; debería haber una clara separación de las muestras en función de estos tres niveles.
+Para hacer el análisis de componentes principales necesito dos paquetes: __AnnotatedDataFrame__ y __DESeq__.
+
+```{r Instalación de paquetes, include=FALSE}
+BiocManager::install("AnnotatedDataFrame")
+BiocManager::install("DESeq")
+```
+
+Gracias al paquete __matrixStats__ puedo calcular la varianza para cada gen incluído en la matriz _logcounts_. Dicha varianza que me servirá como base para la creación del plot PCA con los genes que más han cambiado su expresión, ya que seleccionaré los genes por orden decreciente de su varianza.
+
+```{r Estimación de la varianza, include=FALSE}
+require(matrixStats)
+#Estimamos la varianza para cada fila en la matriz
+matriz = as.matrix(logcounts)
+rv = rowVars(matriz)
+select = order(rv, decreasing = TRUE)
+pca = prcomp(t(logcounts[select, ]))
+```
+
+La función __plotPCA__ realiza fácilmente el gráfico que buscamos.
+
+```{r fig.cap="Plot PCA para el análisis de componentes principales", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+require(DESeq)
+annot = AnnotatedDataFrame(data = data.frame(group, row.names = colnames(logcounts)))
+expSet = new("ExpressionSet", exprs = as.matrix(logcounts), phenoData=annot) 
+plotPCA(expSet, intgroup = c("group"))
+```
+```{r SaveplotPCA, echo=FALSE, results='hide',fig.height=5, fig.width=5}
+#Guardo el plotPCA en un archivo tiff en el directorio figures
+tiff("./figures/plotPCA.tiff", res = 200, width = 4, height = 4, units = 'in')
+plotPCA(expSet, intgroup = c("group"))
+dev.off()
+```
+
+En el gráfico de __análisis de componentes principales__ se ve una clara separación de los tres grupos: las muestras pertenecientes al gruo _ELI_ se sitúan a la derecha del gráfico, las muestras del grupo _SFI_ están en la mitad baja del gráfico y, las muestras _NIT_ se ubican en la parte derecha del plot. Sin embargo, se pueden observar dos muestras que no están situadas con su grupo: una muestra _SFI_ y una muestra _ELI_ se sitúan junto a las muestras del grupo _NIT_. Debido a que son sólo dos muestras, una de cada grupo, no hablaría de efectos de lote personalmente.
+
+## 3.3 Normalización de los datos
+
+Por último, procedemos a la __normalización__ de los datos filtrados. El paquete __edgeR__ se ocupa del análisis de la expresión diferencial más que de la cuantificación de los niveles de expresión. Es decir, se ocupa de los cambios relativos en los niveles de expresión entre las condiciones. Por esta razón, los problemas de normalización se plantean sólo en la medida en que los factores técnicos tienen efectos específicos en la muestra.
 
 Hay dos factores técnicos que pueden afectar a los recuentos de lectura de expresión diferencial: 
   
@@ -126,45 +255,54 @@ y <- calcNormFactors(y)
 y$samples
 ```
 
-Vemos que los factores de normalización han cambiado. Un factor de normalización inferior a uno indica que un pequeño número de genes de alto recuento monopoliza la secuencia, lo que hace que los recuentos de otros genes sean inferiores a lo que sería habitual dado el tamaño de la biblioteca. Como resultado, el tamaño de la biblioteca se reducirá, de forma análoga a la escalada de los recuentos al alza en esa biblioteca. Por el contrario, un factor superior a uno aumenta el tamaño de la biblioteca, aumentando los recuentos que se veían enmascarados.
+Puede observarse que los factores de normalización han cambiado a través del último comando. Un factor de normalización inferior a uno indica que un pequeño número de genes de alto recuento monopoliza la secuencia, lo que hace que los recuentos de otros genes sean inferiores a lo que sería habitual dado el tamaño de la biblioteca. Como resultado, el tamaño de la biblioteca se reducirá, de forma análoga a la escalada de los recuentos al alza en esa biblioteca. Por el contrario, un factor superior a uno aumenta el tamaño de la biblioteca, aumentando los recuentos que se veían enmascarados.
 
-El rendimiento del procedimiento de normalización de la TMM puede examinarse mediante gráficos de diferencia media (plot MD). Esto visualiza el cambio de pliegue ajustado al tamaño de la biblioteca entre dos librerías (la diferencia) contra el promedio de la expresión de log a través de esas librerías (la media). El plot MD de pliegue se genera comparando la muestra 1 (GTEX.111CU.0226.SM.5GZXC) con una librería artificial construida a partir de la media de todas las demás muestras.
+El rendimiento del procedimiento de normalización de la TMM puede examinarse mediante gráficos de diferencia media o __plot MD__. Esto visualiza el cambio de pliegue ajustado al tamaño de la biblioteca entre dos librerías (la diferencia) contra el promedio de la expresión de log a través de esas librerías (la media). El plot MD de pliegue se genera comparando la muestra 1 ( _GTEX.111CU.0226.SM.5GZXC_ ) con una librería artificial construida a partir de la media de todas las demás muestras.
 Lo ideal sería que el grueso de los genes se centrara en un cambio de pliegue en torno a cero, lo que indicaría que se ha eliminado con éxito cualquier sesgo de composición entre las librerías. 
 
-```{r plotMD, echo=FALSE}
+
+```{r fig.cap="Plot MD para la normalización de los conteos", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
 plotMD(cpm(y, log=TRUE), column=1)
 abline(h=0, col="red", lty=2, lwd=2)
 ```
-
-```{r MAplot}
-x_MA = pseudoCount[, 1]
-y_MA = pseudoCount[, 2]
-## M-values
-M=x_MA-y_MA 
-## A-values
-A = (x_MA + y_MA)/2
-df_MA = data.frame(A, M)
-ggplot(df_MA, aes(x = A, y = M)) + geom_point(size = 1.5, alpha = 1/5) +
-geom_hline(color = "blue3") + stat_smooth(se = FALSE, method = "loess", color = "red3")
+```{r saveplotMD, echo=FALSE, results='hide'}
+#Guardo el plotMD en un archivo tiff en el directorio figures
+tiff("./figures/plotMD.tiff", res = 200, width = 4, height = 4, units = 'in')
+plotMD(cpm(y, log=TRUE), column=1)
+abline(h=0, col="red", lty=2, lwd=2)
+dev.off()
 ```
 
+Otro gráfico que se suele representar tras la normalización de los datos, es un __plot MDS__ donde se representan las similitudes relativas de las 30 muestras en función del tipo de infiltración existente en el tiroides. Las similitudes se cuantifican en forma de cambios de pliegue (log folg change) entre muestras.
+
+En el _plot MDS_ la primera dimensión representa la magnitud del cambio biológico que mejor separa las muestras y, por lo tanto, el cambio biológico que representa la mayor proporción de variación de los datos. 
+
+```{r fig.cap="Plot MDS para el análisis de distancias entre muestras", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+colors_MDS <- rep(c("lightblue", "darkblue", "green"), 10)
+points <- c(15,16,17)
+plotMDS(y, col=colors_MDS[y$samples$group], pch=points[y$samples$group], main="Plot MDS para los tres grupos de infiltración")
+legend('bottomright', legend=levels(y$samples$group), pch=points, col=colors_MDS)
+```
+```{r saveplotMDS, echo=FALSE, results='hide'}
+#Guardo el plotMDS en un archivo tiff en el directorio figures
+tiff("./figures/plotMDS.tiff", res = 200, width = 4, height = 4, units = 'in')
+plotMDS(y, col=colors_MDS[y$samples$group], pch=points[y$samples$group], main="Plot MDS para los tres grupos de infiltración")
+legend('bottomright', legend=levels(y$samples$group), pch=points, col=colors_MDS)
+dev.off()
+```
+
+Existe una clara agrupación entre los tres grupos, lo que muestra un efecto según el tipo de infiltración. Esta tendencia era de esperar puesto que en este análisis es el único factor a tener en cuenta y puesto que el plotMDS es un plot muy similar al plot PCA, donde ya se obtuvieron los mismos resultados.
+
+  -El grupo __ELI__ (cuadrado azul) esta mayoritariamente situado a la derecha del gráfico
+  -El grupo __NIT__ (círculo azul) se concentra en la parte izquierda del gráfico
+  -El grupo __SFI__ (triángulo verde) se acumula en la parte media-izquierda superior
+
+Tan sólo hay una muestra del grupo _ELI_ que se sitúa en la aprte del gráfico donde se concentra el grupo _NIT_. Podríamos considerar esta anomalía como un desviación aleatoria ya que solo es una muestra.
 
 # 3. Identificación de genes diferencialmente expresados
 
 ## 3.1 Exploración de los datos
 
-Antes de empezar con el análisis de expresión diferencial, podemos dibujar un plot MDS donde se representan las similitudes relativas de las 30 muestras en función del tipo de infiltración existente en el tiroides. Las similitudes se cuantifican en forma de cambios de pliegue (log folg change) entre muestras.
-
-```{r plotMDS, echo=FALSE}
-plotMDS(y, col=rep(1:3, each=10), main="Mapa conceptual del tiroides")
-legend("bottomright", col = c("green", "red", "black"), legend = c("ELI", "SFI", "NIT"), lwd=0.5, bty = "n")
-```
-
-Existe una tendencia de agrupación entre los tres grupos, lo que muestra un efecto según el tipo de infiltración:
-
-  -El grupo __ELI__ (verde) esta mayoritariamente situado a la derecha del gráfico
-  -El grupo __NIT__ (negro) se concentra en la parte izquierda del gráfico
-  -El grupo __SFI__ (rojo) se acumula en la aprte izquierda superior
 
 
 ## 3.2 Matriz de diseño

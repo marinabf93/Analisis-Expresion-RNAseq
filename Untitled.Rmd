@@ -1,0 +1,36 @@
+---
+title: "cpm y filtraje"
+author: "Marina Ballesteros"
+date: "6/6/2020"
+output: html_document
+---
+
+
+Generación de las cuentas por millón de los genes.
+
+```{r}
+# Obtain CPMs
+myCPM <- cpm(counts_30)
+# Have a look at the output
+head(myCPM)
+```
+
+Por regla general, se puede elegir un buen umbral identificando el CPM que corresponde a un conteo de 10, que en este caso es aproximadamente 0,15.
+
+```{r}
+# Which values in myCPM are greater than 0.5?
+thresh <- myCPM > 0.15
+# This produces a logical matrix with TRUEs and FALSEs
+head(thresh)
+```
+
+```{r}
+# Summary of how many TRUEs there are in each row
+table(rowSums(thresh))
+# we would like to keep genes that have at least 2 TRUES in each row of thresh
+keep <- rowSums(thresh) >= 10
+# Subset the rows of countdata to keep the more highly expressed genes
+counts.keep <- counts_30[keep,]
+summary(keep)
+dim(counts.keep)
+```

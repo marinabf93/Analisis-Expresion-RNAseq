@@ -1,0 +1,30 @@
+---
+title: "Gene Annotation"
+author: "Marina Ballesteros"
+date: "6/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Descarga paquete BiomaRt}
+BiocManager::install("BiomaRt")
+```
+
+Una vez el paquete esta descargado, usamos la función __useMart__ para acceder a la base de datos de los identificadores de genes de __Ensemble__.
+
+```{r Acceso a la BD Ensemble}
+require(biomaRt)
+human<-useMart(host="www.ensembl.org", "ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl") 
+attributes=c("ensembl_gene_id", "entrezgene","hgnc_symbol")
+```
+
+Creamos un vector con los identificadores de los genes
+
+```{r vector con los ids de los genes}
+ensembl_names<-rownames(counts)
+head(ensembl_names)
+genemap<-getBM(attributes, filters="ensembl_gene_id", values=ensembl_names, mart=human)
+```
