@@ -113,7 +113,7 @@ dim(counts.keep)
 Una vez he realizado el filtraje, debo convertir los conteos en un objeto de la clase __DEGList__; este objeto es propio del paquete _edgeR_ y sirve para almacenar datos de conteos con los parámetros que se consideren pertinentes. En este caso sólo añadiré como parámetro la clasificación de las muestras en el grupo correspondiente gracias al objeto _group_ creado junto con la tabla de conteos _counts_30_.
 
 ```{r Creación del objeto DEGList, include=FALSE}
-y <- DGEList(counts.keep, group = group)
+y <- DGEList(counts.keep, group = group, genes = counts)
 # Muestras del obtejo DEGList
 names(y)
 # Información del tamaño de las librerías en cada muestra
@@ -255,23 +255,54 @@ y <- calcNormFactors(y)
 y$samples
 ```
 
-Puede observarse que los factores de normalización han cambiado a través del último comando. Un factor de normalización inferior a uno indica que un pequeño número de genes de alto recuento monopoliza la secuencia, lo que hace que los recuentos de otros genes sean inferiores a lo que sería habitual dado el tamaño de la biblioteca. Como resultado, el tamaño de la biblioteca se reducirá, de forma análoga a la escalada de los recuentos al alza en esa biblioteca. Por el contrario, un factor superior a uno aumenta el tamaño de la biblioteca, aumentando los recuentos que se veían enmascarados.
+Puede observarse que los factores de normalización han cambiado a través del último comando. Un factor de normalización inferior a uno indica que un pequeño número de genes de alto recuento monopoliza la secuencia, lo que hace que los recuentos de otros genes sean inferiores a lo que sería habitual dado el tamaño de la librería. Como resultado, el tamaño de la librería se reducirá, de forma análoga a la escalada de los recuentos al alza en esa librería. Por el contrario, un factor superior a uno aumenta el tamaño de la librería y equivale a reducir los recuentos.
 
-El rendimiento del procedimiento de normalización de la TMM puede examinarse mediante gráficos de diferencia media o __plot MD__. Esto visualiza el cambio de pliegue ajustado al tamaño de la biblioteca entre dos librerías (la diferencia) contra el promedio de la expresión de log a través de esas librerías (la media). El plot MD de pliegue se genera comparando la muestra 1 ( _GTEX.111CU.0226.SM.5GZXC_ ) con una librería artificial construida a partir de la media de todas las demás muestras.
-Lo ideal sería que el grueso de los genes se centrara en un cambio de pliegue en torno a cero, lo que indicaría que se ha eliminado con éxito cualquier sesgo de composición entre las librerías. 
+El rendimiento del procedimiento de normalización de la TMM puede examinarse mediante gráficos de diferencia media o __plot MD__. Estas grñaficas muestran la expresión media (media: eje x) frente a los cambios de logaritmo (diferencia: eje y).
+
+El plot MD de pliegue se genera comparando la muestra 1:  _GTEX.111CU.0226.SM.5GZXC_  con una librería artificial construida a partir de la media de todas las demás muestras. He elegido la librería de la muestra 1 porque es una de las muestras con el factor de normalización más pequeño: 0.882. Para tener el ejemplo contrario, representaré igualmente la muestra _GTEX.13NZ9.1126.SM.5MR37_ la cual tiene uno de los factores de normalización más elevados: 1.156.
+
+Si trazamos gráficos de diferencia media usando la función __plotMD__ para estas muestras, deberíamos ser capaces de ver el problema del sesgo de composición. Usaremos los recuentos del archivo _logcounts_, que han sido normalizados para el tamaño de la biblioteca, pero no para el sesgo de composición y lo compararé con este mismo gráfico pero con los valores de _y_ después de la normalización. Lo ideal sería que en el _plotMD_ del objeto _y_ el grueso de los genes se centrara en un cambio de pliegue en torno a cero para ambas muestras, lo que indicaría que se ha eliminado con éxito cualquier sesgo de composición entre las librerías. 
 
 
-```{r fig.cap="Plot MD para la normalización de los conteos", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
-plotMD(cpm(y, log=TRUE), column=1)
+```{r fig.cap="Plot MD para el logaritmo de los conteos, normalizados sólo para el tamaño de las librerías.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+par(mfrow=c(1,2))
+plotMD(logcounts,column = 1)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(logcounts,column = 24)
 abline(h=0, col="red", lty=2, lwd=2)
 ```
-```{r saveplotMD, echo=FALSE, results='hide'}
+```{r saveplotMD para logcounts, echo=FALSE, results='hide'}
 #Guardo el plotMD en un archivo tiff en el directorio figures
-tiff("./figures/plotMD.tiff", res = 200, width = 4, height = 4, units = 'in')
-plotMD(cpm(y, log=TRUE), column=1)
+tiff("./figures/plotMD_logcounts.tiff", res = 200, width = 4, height = 4, units = 'in')
+par(mfrow=c(1,2))
+plotMD(logcounts,column = 1)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(logcounts,column = 24)
 abline(h=0, col="red", lty=2, lwd=2)
 dev.off()
 ```
+En ambos casos se ve con claridad que los valores no se sitúan en torno a un cambio de pliegue de cero marcado por la línea roja; sino que las muestras están por debajo y por encima de un cambio de pliegeue de cero respectivamente. Ahora representaré el plotMD después de la normalización para el sesgo de composición con el _objeto y_.
+
+```{r fig.cap="Plot MD para el objeto y, normalizado tanto para el tamaño de las librerías como para el sesgo de composición.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+par(mfrow=c(1,2))
+plotMD(y,column = 1)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(y,column = 24)
+abline(h=0, col="red", lty=2, lwd=2)
+```
+
+```{r saveplotMD para y normalizado, echo=FALSE, results='hide'}
+#Guardo el plotMD en un archivo tiff en el directorio figures
+tiff("./figures/plotMD_yNormalizado.tiff", res = 200, width = 4, height = 4, units = 'in')
+par(mfrow=c(1,2))
+plotMD(y,column = 1)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(y,column = 24)
+abline(h=0, col="red", lty=2, lwd=2)
+dev.off()
+```
+
+Ahora se aprecia que el grueso de genes para ambas muestras se sitúan en torno a un cambio de pliege en torno a cero, por lo que el sesgo se ha corregido con la normalización del _objeto y_.
 
 Otro gráfico que se suele representar tras la normalización de los datos, es un __plot MDS__ donde se representan las similitudes relativas de las 30 muestras en función del tipo de infiltración existente en el tiroides. Las similitudes se cuantifican en forma de cambios de pliegue (log folg change) entre muestras.
 
@@ -301,58 +332,201 @@ Tan sólo hay una muestra del grupo _ELI_ que se sitúa en la aprte del gráfico
 
 # 3. Identificación de genes diferencialmente expresados
 
-## 3.1 Exploración de los datos
+## 3.1 Matriz de diseño
 
-
-
-## 3.2 Matriz de diseño
-
-La matriz de diseño contiene los predictores para cada muestra; en la matriz se asigna un coeficiente a cada grupo. En este análisis, nos interesan las diferencias entre los tres tipos de infiltración. Por lo tanto, creamos una matriz de diseño utilizando el factor _tipo de infiltración_.
+La matriz de diseño contiene los predictores para cada muestra; en la matriz se asigna un coeficiente a cada grupo. La matriz de diseño se crea a partir del _objeto y_ ya que contiene la información sobre el grupo experimental al que pertenece cada muestra. 
+En este análisis, nos interesan las diferencias entre los tres tipos de infiltración. Por lo tanto, creamos una matriz de diseño utilizando el factor _tipo de infiltración_. La función __model.matrix__ permite crear la matriz de diseño de manera sencilla, en esta matriz se asignarán 1 para indicar que la muestra pertenece a dicho grupo experimental y cero en los otros dos grupos. 
 
 ```{r Matriz de diseño, echo=FALSE}
+# Estraigo los grupos experimentales del objeto y
 grupos<- y$samples$group
 design <- model.matrix(~0+grupos)
 colnames(design) <- levels(grupos)
+rownames(design)<- ShortName
 design
 ```
 
-## 3.3 Estimación de la dispersión
+## 3.2 Estimación de la dispersión
 
-Para experimentos con un solo factor, como en este caso (tipo de infiltración), el paquete __edgeR__ utiliza el método de máxima probabilidad condicional ajustada por cuantiles (qCML). El método qCML calcula la probabilidad condicionándose a los recuentos totales de cada etiqueta, y utiliza pseudocuentas después de ajustar los tamaños de las bibliotecas. 
+El modelo probabilístico __Binomial Negativa__ es el elegido por el paquete __edgeR__ para modelar los datos de conteo. El primer paso será estimar la dispersión de cada tránscrito a partir de la variabilidad total para todos los genes.
 
-Estimamos la dispersión del __modelo negativo binomial__ (NB) usando la función _estimateDisp_. La estimación se robustece contra los potenciales genes atípicos. Dicha función devuelve el objeto DGEList con entradas adicionales para las dispersiones NB estimadas para todos los genes. Estas estimaciones pueden ser visualizadas con el plotBCV, que muestra el coeficiente biológico de variación de cada gen.
+Para experimentos con un solo factor, como en este caso (tipo de infiltración) donde se buscan comparaciones por pares entre grupos, el paquete __edgeR__ utiliza el método de máxima probabilidad condicional ajustada por cuantiles (qCML). 
+El __método qCML__ es un enfoque clásico del paquete _edgeR_ que calcula la probabilidad condicionándose a los recuentos totales de cada etiqueta, y utiliza pseudocuentas después de ajustar los tamaños de las bibliotecas. Es decir, primero se estima la dispersión común o variabilidad total (common dispersion) y luego se estima la  dispersión gen a gen (dispersion Tagwise). Para cada una de estas estimaciones existe una función propia; sin embargo, usaré la función _estimateDisp_ capaz de calcular las dos dispersiones a la vez.
+
+Entonces estimamos la dispersión del __modelo negativo binomial__ (NB) usando la función _estimateDisp_. La estimación se robustece contra los potenciales genes atípicos. Dicha función devuelve el objeto DGEList con entradas adicionales para las dispersiones NB estimadas para todos los genes. Estas estimaciones pueden ser visualizadas con el plotBCV, que muestra el coeficiente biológico de variación de cada gen.
 
 ```{r Estimación de la dispersión, echo=FALSE}
+# Calculo ambas dispersiones
 y <- estimateDisp(y, design, robust=TRUE)
+# Dispersión común
 y$common.dispersion
+# Dispersión gen a gen
+head(y$tagwise.dispersion,10)
+BCV<- sqrt(y$common.dispersion)
+BCV
+```
+
+La estimación de la dispersión nos da una dispersión común de 0.24 y se muestras igualmente la dispersión de cada gen, la cual se ve que varía hacia arriba o hacia abajo con respecto a la dispersión común. El __coeficiente de variación biológica (BCV)__ se ha calculado a través de la raíz cuadrada de la dispersión común, obteniendo un coeficiente BCV de 48,8%. 
+
+El coeficiente BCV también puede estimarse gráficamente a través de la función __plotBCV__ junto a las dispersiones calculadas anteriormente; de este modo puede comprobarse si la dispersión común representa realmente la dispersión existente entre los genes. Estos gráficos se obtienen al representar la raíz cuadrada de las dispersiones estimadas frente al logaritmo en base 2 de las lecturas por millón.
+
+```{r fig.cap="Plot BCV para el cálculo del coeficiente de variación biológica (BCV) y el cálculo de la dispersión entre las muestras.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
 plotBCV(y)
 ```
 
+El gráfico BCV representa las dispersiones estimadas gen a gen (dispersión tagwise) a partir de la dispersión común, representada por la línea roja. Cada punto en el gráfico representa un gen y la línea azul muestra la tendencia de variación biológica con el aumento de lecturas. 
+El gráfico indica que el coeficiente BCV es entorno a un 50%, el cual coincide con el coeficiente BCV calculado a través de la raíz cuadrada de la dispersión negativa binomial. La variación biológica entre las muestras del mismo grupo influye en el número de genes que se expresan diferencialmente es dicho grupo. Es decir, cuanto mayor sea la variación entre los tres grupos con respecto a la variación entre grupos, más fácil será detectar los genes que cambian su expresión.
 
-Luego estimamos las dispersiones de cuasi-probabilidad (QL) alrededor de la tendencia de dispersión usando la función _glmQLFit_. Esta función devuelve un objeto DGEGLM que contiene los valores estimados de los coeficientes GLM para cada gen, así como la tendencia de dispersión de la media ajustada de QL, las estimaciones de QL ajustadas y los grados de libertad previos (df). Se recomienda utilizar el argumento "robust=TRUE" ya que identifica los genes que son atípicos de la tendencia de dispersión media NB.
-Estos pueden ser visualizados con la función _plotQLDisp_.
+De manera general, un valor óptimo del coeficiente de variación biológico común entre 0.2 y 0.4 favorecería la detección de genes diferencialmente expresados; en este caso tenemos un coeficiente de 0.49, ligeramente superior al valor óptimo. Esto podría llevarnos a seleccionar menos genes DE de los que realmente hay.
+
+```{r saveplotBCV, echo=FALSE, results='hide'}
+#Guardo el plotBCV en un archivo tiff en el directorio figures
+tiff("./figures/plotBCV.tiff", res = 200, width = 4, height = 4, units = 'in')
+plotBCV(y)
+dev.off()
+```
+
+Luego pasamos al análisis de expresión diferencial estimando las dispersiones de cuasi-probabilidad (QL) alrededor de la tendencia de dispersión usando la función _glmQLFit_. Esta función devuelve un objeto DGEGLM al que llamamos __fit__ que contiene los valores estimados de los coeficientes GLM para cada gen, así como la tendencia de dispersión de la media ajustada de QL, las estimaciones de QL ajustadas y los grados de libertad previos (df). 
+Se recomienda utilizar el argumento "robust=TRUE" ya que identifica los genes que son atípicos de la tendencia de dispersión media NB; en este caso se identifican como genes atípicos las filas 2,8,9,10,12 y 13.
 
 ```{r dispersiones QL, echo=FALSE}
 fit <- glmQLFit(y, design, robust=TRUE) 
 head(fit$coefficients)
+```
+
+Estos pueden ser visualizados con la función _plotQLDisp_.
+
+```{r fig.cap="Plot QLDisp para el cálculo genes atípicos a la tendencia de dispersión media binomial negativa.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
 plotQLDisp(fit)
 ```
-  
+
+```{r saveplotQLDisp, echo=FALSE, results='hide'}
+#Guardo el plotQLDisp en un archivo tiff en el directorio figures
+tiff("./figures/plotQLDisp.tiff", res = 200, width = 4, height = 4, units = 'in')
+plotQLDisp(fit)
+dev.off()
+```
+
 ## 3.3 Expresión diferencial
 
-En este estudio hay un interés en comparar los tres tipos de grupos entre sí, por lo que debemos hacer tres contrastes:
+En este estudio hay un interés en comparar los tres tipos de grupos entre sí, por lo que debemos hacer __tres contrastes__:
 
   -SFI vs NIT
   -ELI vs NIT
   -ELI vs SFI
+  
+En un primer paso, haré los tres contrastes por separado para buscar diferencias entre los dos grupos comparados en cada contraste. En el paquete __edgeR__ la función __exactTest__ realiza el test exacto binomial negativo. En esta función se puede hacer cada contraste por separado, comparando a cada vez dos grupos entre sí para realizar la prueba en cada fila de datos.
 
-Para poder llevar a cabo un contraste entre más de dos grupos, recurrimos al análisis unidireccional de varianza (ANOVA) para cada gen. Para ello, debemos crear primero una matriz de contrastes, donde cada columna representa un contraste entre dos grupos de interés.
+**Contraste ELI vs NIT**
 
-```{r Matriz de contrastes, include=FALSE}
+Realización del test exacto negativo.
+
+```{r contraste ELIvsNIT, echo=FALSE}
+ELIvsNIT<- exactTest(y, pair = c("ELI", "NIT"))
+topTags(ELIvsNIT)
+```
+
+Selección de genes DE para el contraste ELI vs NIT. Obtenemos como resultado un total de 2748 genes con un valor FDR inferior al nivel de significación ($\alpha=0.05$). De estos genes DE, 1954 disminuyen su expresión y 794 están sobreexpresados.
+
+```{r decideTest ELIvsNIT, echo=FALSE}
+ELIvsNIT_test<-decideTestsDGE(ELIvsNIT)
+summary(ELIvsNIT_test)
+```
+
+Representación gráfica con __plotSmear__. Este tipo de gráfico se basa en la representación del logaritmo en base 2 del fold- change (logFC) correspondiente a cada gen frente a la media del logaritmo en base 2 de los conteos por millón. Los puntos se colorearán de rojo si el valor p ajustado es inferior a 0,01; es decir, los puntos rojos son los genes diferencialmente expresados. Las líneas azules horizontales muestran cambios cuádruples.
+
+```{r fig.cap="PlotSmear para el contraste ELI vs NIT.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+detags_ELIvsNIT <- rownames(y)[as.logical(ELIvsNIT_test)]
+plotSmear(ELIvsNIT, de.tags=detags_ELIvsNIT, main="plotSmear contraste ELIvsNIT")
+abline(h=c(-1,1), col="blue")
+```
+```{r saveplotSmear ELIvsNIT, echo=FALSE, results='hide'}
+#Guardo el plotSmear ELIvsNIT en un archivo tiff en el directorio figures
+tiff("./figures/plotSmear_ELIvsNIT.tiff", res = 200, width = 4, height = 4, units = 'in')
+plotSmear(ELIvsNIT, de.tags=detags_ELIvsNIT, main="plotSmear contraste ELIvsNIT")
+abline(h=c(-1,1), col="blue")
+dev.off()
+```
+
+**Contraste SFI vs NIT**
+
+Realización del test exacto negativo.
+
+```{r contraste SFIvsNIT, echo=FALSE}
+SFIvsNIT<- exactTest(y, pair = c("SFI", "NIT"))
+topTags(SFIvsNIT)
+```
+
+Selección de genes DE para el contraste SFI vs NIT. Para este contraste apenas se encuentras genes DE, tan sólo 41 genes de los cuales 39 disminuyen su expresión y 2 la aumentan.
+
+```{r decideTest SFIvsNIT, echo=FALSE}
+SFIvsNIT_test<-decideTestsDGE(SFIvsNIT)
+summary(SFIvsNIT_test)
+```
+
+Representación gráfica con __plotSmear__. Al haber tan pocos genes DE con respecto al total, los puntos rojos apenas se aprecian visualmente.
+
+```{r fig.cap="PlotSmear para el contraste SFI vs NIT.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+detags_SFIvsNIT <- rownames(y)[as.logical(SFIvsNIT_test)]
+plotSmear(SFIvsNIT, de.tags=detags_SFIvsNIT, main="plotSmear contraste SFIvsNIT")
+abline(h=c(-1,1), col="blue")
+```
+```{r saveplotSmear SFIvsNIT, echo=FALSE, results='hide'}
+#Guardo el plotSmear SFIvsNIT en un archivo tiff en el directorio figures
+tiff("./figures/plotSmear_SFIvsNIT.tiff", res = 200, width = 4, height = 4, units = 'in')
+plotSmear(SFIvsNIT, de.tags=detags_SFIvsNIT, main="plotSmear contraste SFIvsNIT")
+abline(h=c(-1,1), col="blue")
+dev.off()
+```
+
+**Contraste ELI vs SFI**
+
+Realización del test exacto negativo.
+
+```{r contraste ELIvsSFI, echo=FALSE}
+ELIvsSFI<- exactTest(y, pair = c("ELI", "SFI"))
+topTags(ELIvsSFI)
+```
+
+Selección de genes DE para el contraste ELI vs SFI. Para este contraste un total de 2470 genes tiene un FDR inferior al nivel de significación. De ellos 686 aumentan su expresión y 1784 la disminuyen. 
+
+```{r decideTest ELIvsSFI, echo=FALSE}
+ELIvsSFI_test<-decideTestsDGE(ELIvsSFI)
+summary(ELIvsSFI_test)
+```
+
+Representación gráfica con __plotSmear__. En este contraste la mayoría de los puntos rojos están bajo un logFC negativo en el eje Y porque hay muchos más genes DE downregulated.
+
+```{r fig.cap="PlotSmear para el contraste ELI vs SFI.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+detags_ELIvsSFI <- rownames(y)[as.logical(ELIvsSFI_test)]
+plotSmear(ELIvsSFI, de.tags=detags_ELIvsSFI, main="plotSmear contraste ELIvsSFI")
+abline(h=c(-1,1), col="blue")
+```
+```{r saveplotSmear ELIvsSFI, echo=FALSE, results='hide'}
+#Guardo el plotSmear ELIvsSFI en un archivo tiff en el directorio figures
+tiff("./figures/plotSmear_ELIvsSFI.tiff", res = 200, width = 4, height = 4, units = 'in')
+plotSmear(ELIvsSFI, de.tags=detags_ELIvsSFI, main="plotSmear contraste ELIvsSFI")
+abline(h=c(-1,1), col="blue")
+dev.off()
+```
+
+# 4. Anotación de los resultados
+
+
+
+
+
+
+# 5. Búsqueda de patrones de expresión y agrupación de las muestras
+
+Para poder llevar a cabo un contraste entre más de dos grupos, recurrimos al __análisis unidireccional de varianza (ANOVA)__ para cada gen. Para ello, debemos crear primero una matriz de contrastes, donde cada columna representa un contraste entre dos grupos de interés. La matriz de contrastes se crea a partir de la función _makeContrasts_. 
+
+```{r Matriz de contrastes, echo=FALSE}
 con <- makeContrasts(
 SFIvsNIT = SFI - NIT,
 ELIvsNIT = ELI - NIT,
 ELIvsSFI = ELI - SFI, levels=design)
+print(con)
 ```
 
 La función _glmQLFTest_ lleva a cabo la prueba de cuasi-probabilidad (QL) del test F que se aplica para identificar los genes que se expresan diferencialmente entre los tres grupos. Esto combina las tres comparaciones por pares en un solo estadístico F y un p-valor. La lista de genes más significativos puede obtenerse con la función _topTags_.
@@ -361,6 +535,15 @@ La función _glmQLFTest_ lleva a cabo la prueba de cuasi-probabilidad (QL) del t
 anov <- glmQLFTest(fit, contrast=con)
 topTags(anov)
 ```
+
+El número total de genes diferencialmente expresados en cada grupo a un FDR del 5% puede ser examinado con los tests de decisión gracias a la función _decideTests_.
+
+```{r Resumen decideTests, echo=FALSE}
+genes.de <- decideTests(anov, p.value=0.05)
+summary(genes.de)
+```
+
+El resultado anterior muestra que de los 22990 genes analizados (es el número de genes seleccionados tras la filtración), 2277 genes cambian su expresión, todos ellos aumentan su expresión.
 
 # 4.Anotación de los resultados
 

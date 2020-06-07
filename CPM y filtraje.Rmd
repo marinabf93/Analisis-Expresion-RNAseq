@@ -34,3 +34,25 @@ counts.keep <- counts_30[keep,]
 summary(keep)
 dim(counts.keep)
 ```
+
+```{r}
+# Let's have a look and see whether our threshold of 0.5 does indeed correspond to a count of about 10-15
+# We will look at the first sample
+plot(myCPM[,1],counts_30[,1])
+# Let us limit the x and y-axis so we can actually look to see what is happening at the smaller counts
+plot(myCPM[,1],counts_30[,1],ylim=c(0,50),xlim=c(0,3))
+# Add a vertical line at 0.15 CPM
+abline(v=0.15)
+```
+
+Convertir los genes filtrados en una DEGList
+
+```{r}
+dgeObj <- DGEList(counts.keep, group = group)
+# have a look at dgeObj
+dgeObj
+# See what slots are stored in dgeObj
+names(dgeObj)
+# Library size information is stored in the samples slot
+dgeObj$samples
+```
