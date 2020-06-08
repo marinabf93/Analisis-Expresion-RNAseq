@@ -510,11 +510,60 @@ abline(h=c(-1,1), col="blue")
 dev.off()
 ```
 
+Una vez tenemos la lista de genes DE en cada contraste, podemos buscar los genes comunes a los tres contrastes con la función __intersect__.
+
+```{r Selección de genes DE comunes a los tres contrastes, echo=FALSE}
+comunes<- intersect(intersect(rownames(topTags(ELIvsNIT)), rownames(topTags(SFIvsNIT))), rownames(topTags(ELIvsSFI)))
+length(comunes)
+```
+
+No hay ningún gen DE común para los tres contrastes. Voy a verificar si hay genes DE comunes entre dos contrastes.
+
+```{r Genes DE comunes entre los contrastes ELIvsNIT y SFIvsNIT, echo=FALSE}
+comunes_1vs2<-intersect(rownames(topTags(ELIvsNIT)), rownames(topTags(SFIvsNIT)))
+length(comunes_1vs2)
+print(comunes_1vs2)
+```
+
+Existten 3 genes DE comunes para los contrastes ELIvsNIT y SFIvsNIT. Estos genes corresponden a las filas: 16760, 6717 y 3379; si extraemos estas filas en el archivo _counts_ obtenemos el identificador ENSEMBL
+
+```{r Identificación de los genes DE comunes a los contrastes ELIvsNIT y SFIvsNIT, echo=FALSE}
+counts$X[c(16760, 6717, 3379)]
+```
+
+Pasamos a la siguiente pareja de contrastes.
+
+```{r Genes DE comunes entre los contrastes ELIvsNIT y ELIvsSFI, echo=FALSE}
+comunes_1vs3<-intersect(rownames(topTags(ELIvsNIT)), rownames(topTags(ELIvsSFI)))
+length(comunes_1vs3)
+print(comunes_1vs3)
+```
+
+Buscamos el identificador ENSEMBL para estos siete genes.
+
+```{r Identificación de los genes DE comunes a los contrastes ELIvsNIT y ELIvsSFI, echo=FALSE}
+counts$X[c(49043, 42101, 48230, 31449, 45681, 3388, 49407)]
+```
+
+La última pareja de contrastes a comparar es SFIvsNIT con ELIvsSFI.
+
+```{r Genes DE comunes entre los contrastes SFIvsNIT y ELIvsSFI, echo=FALSE}
+comunes_2vs3<-intersect(rownames(topTags(SFIvsNIT)), rownames(topTags(ELIvsSFI)))
+length(comunes_2vs3)
+print(comunes_2vs3)
+```
+
+No hay ningún gen DE común para esta pareja de contrastes.
+
 # 4. Anotación de los resultados
 
+Los símbolos de genes disponibles para los humanos también pueden ser añadidos para complementar los identificadores de __Entrez__ para cada gen, usando la anotación en el paquete __org.Hs.eg.db__.
 
-
-
+```{r Anotación, include=FALSE}
+require(org.Hs.eg.db)
+Symbol <- mapIds(org.Hs.eg.db, keys=rownames(y), keytype="ENTREZID", column="SYMBOL")
+y$genes <- data.frame(Symbol=Symbol)
+```
 
 
 # 5. Búsqueda de patrones de expresión y agrupación de las muestras
@@ -545,39 +594,6 @@ summary(genes.de)
 
 El resultado anterior muestra que de los 22990 genes analizados (es el número de genes seleccionados tras la filtración), 2277 genes cambian su expresión, todos ellos aumentan su expresión.
 
-# 4.Anotación de los resultados
-
-Los símbolos de genes disponibles para los humanos también pueden ser añadidos para complementar los identificadores de __Entrez__ para cada gen, usando la anotación en el paquete __org.Hs.eg.db__.
-
-```{r Anotación, include=FALSE}
-require(org.Hs.eg.db)
-Symbol <- mapIds(org.Hs.eg.db, keys=rownames(y), keytype="ENTREZID", column="SYMBOL")
-y$genes <- data.frame(Symbol=Symbol)
-```
-
-# 5.Búsqueda de patrones de expresión y agrupación de las muestras
-
-En este análisis se han realizado tres contrastes con el fin de comparar los tres tipos de infiltración entre sí. El objetivo es extraer los genes que cambian simultáneamente entre las distintas comparaciones.
-
-Para anotar y contar los genes que cambian en una o más condiciones se utiliza la función __decideTest__ del paquete _limma_. Esta función nos devolverá una tabla llamada __res__ cuya interpretación es la siguiente:
-
-  + 1: El gen esta sobreexpresado (Up)
-  + 0: No hay cambio significativo en la expresión del gen (NotSig)
-  + -1: El gen ha bajado su expresión (Down)
-
-```{r decideTests.1, include=FALSE}
-library(limma)
-res<-decideTests(anov, method="separate", adjust.method="fdr", p.value=0.1, lfc=1)
-```
-
-A continuación se muestra un resumen de la tabla _res_ obtenida.
-
-```{r resumeDecideTests, echo=FALSE}
-#Resumen de la tabla
-sum.res.rows<-apply(abs(res),1,sum)
-res.selected<-res[sum.res.rows!=0,] 
-print(summary(res))
-```
 
 # 6.Análisis de significación biológica
 
