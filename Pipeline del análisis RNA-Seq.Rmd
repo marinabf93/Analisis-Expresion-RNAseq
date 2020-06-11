@@ -336,6 +336,7 @@ Tan sólo hay una muestra del grupo _ELI_ que se sitúa en la aprte del gráfico
 
 La matriz de diseño contiene los predictores para cada muestra; en la matriz se asigna un coeficiente a cada grupo. La matriz de diseño se crea a partir del _objeto y_ ya que contiene la información sobre el grupo experimental al que pertenece cada muestra. 
 En este análisis, nos interesan las diferencias entre los tres tipos de infiltración. Por lo tanto, creamos una matriz de diseño utilizando el factor _tipo de infiltración_. La función __model.matrix__ permite crear la matriz de diseño de manera sencilla, en esta matriz se asignarán 1 para indicar que la muestra pertenece a dicho grupo experimental y cero en los otros dos grupos. 
+La matriz de diseño se ha registrado en el directorio __results__ bajo el nombre _design.matrix_.
 
 ```{r Matriz de diseño, echo=FALSE}
 # Estraigo los grupos experimentales del objeto y
@@ -344,6 +345,9 @@ design <- model.matrix(~0+grupos)
 colnames(design) <- levels(grupos)
 rownames(design)<- ShortName
 design
+```
+```{r Registro de la matriz de diseño, include=FALSE}
+write.csv(design, file = "./results/design.matrix.csv")
 ```
 
 ## 3.2 Estimación de la dispersión
@@ -415,25 +419,25 @@ En este estudio hay un interés en comparar los tres tipos de grupos entre sí, 
   -ELI vs NIT
   -ELI vs SFI
   
-En un primer paso, haré los tres contrastes por separado para buscar diferencias entre los dos grupos comparados en cada contraste. En el paquete __edgeR__ la función __exactTest__ realiza el test exacto binomial negativo. En esta función se puede hacer cada contraste por separado, comparando a cada vez dos grupos entre sí para realizar la prueba en cada fila de datos.
+En un primer paso, haré los tres contrastes por separado para buscar diferencias entre los dos grupos comparados en cada contraste. En el paquete __edgeR__ la función __exactTest__ realiza el test exacto binomial negativo. En esta función se puede hacer cada contraste por separado, comparando a cada vez dos grupos entre sí para realizar la prueba en cada fila de datos. La función __topTags__ nos devolverá una tabla con los genes DE más significativos para ese contraste.
 
 **Contraste ELI vs NIT**
 
-Realización del test exacto negativo.
+Realización del test exacto negativo y obtención de la tabla con les genes DE más significativos.
 
 ```{r contraste ELIvsNIT, echo=FALSE}
 ELIvsNIT<- exactTest(y, pair = c("ELI", "NIT"))
 topTags(ELIvsNIT)
 ```
 
-Selección de genes DE para el contraste ELI vs NIT. Obtenemos como resultado un total de 2748 genes con un valor FDR inferior al nivel de significación ($\alpha=0.05$). De estos genes DE, 1954 disminuyen su expresión y 794 están sobreexpresados.
+El siguiente paso es seleccionar los genes DE para el contraste ELI vs NIT. Obtenemos como resultado un total de 2748 genes con un valor FDR inferior al nivel de significación ($\alpha=0.05$). De estos genes DE, 1954 disminuyen su expresión y 794 están sobreexpresados.
 
 ```{r decideTest ELIvsNIT, echo=FALSE}
 ELIvsNIT_test<-decideTestsDGE(ELIvsNIT)
 summary(ELIvsNIT_test)
 ```
 
-Representación gráfica con __plotSmear__. Este tipo de gráfico se basa en la representación del logaritmo en base 2 del fold- change (logFC) correspondiente a cada gen frente a la media del logaritmo en base 2 de los conteos por millón. Los puntos se colorearán de rojo si el valor p ajustado es inferior a 0,01; es decir, los puntos rojos son los genes diferencialmente expresados. Las líneas azules horizontales muestran cambios cuádruples.
+Por último, represento gráficamente los resultados con la función __plotSmear__. Este tipo de gráfico se basa en la representación del logaritmo en base 2 del fold- change (logFC) correspondiente a cada gen frente a la media del logaritmo en base 2 de los conteos por millón. Los puntos se colorearán de rojo si el valor p ajustado es inferior a 0,01; es decir, los puntos rojos son los genes diferencialmente expresados. Las líneas azules horizontales muestran cambios cuádruples.
 
 ```{r fig.cap="PlotSmear para el contraste ELI vs NIT.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
 detags_ELIvsNIT <- rownames(y)[as.logical(ELIvsNIT_test)]
@@ -450,7 +454,7 @@ dev.off()
 
 **Contraste SFI vs NIT**
 
-Realización del test exacto negativo.
+Realización del test exacto negativo y obtención de la tabla _topTags_.
 
 ```{r contraste SFIvsNIT, echo=FALSE}
 SFIvsNIT<- exactTest(y, pair = c("SFI", "NIT"))
@@ -481,7 +485,7 @@ dev.off()
 
 **Contraste ELI vs SFI**
 
-Realización del test exacto negativo.
+Realización del test exacto negativo y obtención de la tabla con los genes DE.
 
 ```{r contraste ELIvsSFI, echo=FALSE}
 ELIvsSFI<- exactTest(y, pair = c("ELI", "SFI"))
@@ -557,18 +561,159 @@ No hay ningún gen DE común para esta pareja de contrastes.
 
 # 4. Anotación de los resultados
 
-Los símbolos de genes disponibles para los humanos también pueden ser añadidos para complementar los identificadores de __Entrez__ para cada gen, usando la anotación en el paquete __org.Hs.eg.db__.
+El proceso de anotación consiste en relacionar los identificadores _ENTREZID_ de la primera columna de las tablas _topTags_ con información más fácil de manejar como el _Gene Symbol_ o _Gene Name_. El símbolo del gen y su descripción se añadirán a los resultados de las tablas gracias al paquete de anotación del genoma humano __org.Hs.eg.db__, el cual nos permite asociar los identificadores _ENTREZID_ de la primera columna de las tablas con el nombre y la descripción de los genes.
 
-```{r Anotación, include=FALSE}
-require(org.Hs.eg.db)
-Symbol <- mapIds(org.Hs.eg.db, keys=rownames(y), keytype="ENTREZID", column="SYMBOL")
-y$genes <- data.frame(Symbol=Symbol)
+```{r Registro de los resultados de los topTags, echo=FALSE}
+results_ELIvsNIT <- as.data.frame(topTags(ELIvsNIT, n= Inf))
+results_SFIvsNIT <- as.data.frame(topTags(SFIvsNIT, n= Inf))
+results_ELIvsSFI <- as.data.frame(topTags(ELIvsSFI, n= Inf))
+```
+
+Anotación de los genes seleccionados con el genoma humano __org.Hs.eg.db__ como referencia.
+
+```{r Anotación de los genes, echo=FALSE}
+library(org.Hs.eg.db)
+ann_ELIvsNIT <- select(org.Hs.eg.db,keys=rownames(results_ELIvsNIT),columns=c("ENTREZID","SYMBOL","GENENAME"))
+ann_SFIvsNIT <- select(org.Hs.eg.db,keys=rownames(results_SFIvsNIT),columns=c("ENTREZID","SYMBOL","GENENAME"))
+ann_ELIvsSFI <- select(org.Hs.eg.db,keys=rownames(results_ELIvsSFI),columns=c("ENTREZID","SYMBOL","GENENAME"))
+```
+
+Añado el resultados de las anotaciones a la tabla _topTags_ de los genes seleccionados.
+
+```{r Unión de la anotación a los resultados, echo=FALSE}
+results.annotated_ELIvsNIT <- cbind(results_ELIvsNIT, ann_ELIvsNIT)
+results.annotated_SFIvsNIT <- cbind(results_SFIvsNIT, ann_SFIvsNIT)
+results.annotated_ELIvsSFI <- cbind(results_ELIvsSFI, ann_ELIvsSFI)
+```
+
+Guardo los archivos en un archivo excel para cada contraste; de este modo las anotaciones de los genes seleccionados en cada contraste están disponibles en el directorio __results__.
+
+```{r Registro de los resultados de anotación, echo=FALSE}
+write.csv(results.annotated_ELIvsNIT,file="./results/ELIvsNIT.csv",row.names=FALSE)
+write.csv(results.annotated_SFIvsNIT,file="./results/SFIvsNIT.csv",row.names=FALSE)
+write.csv(results.annotated_ELIvsSFI,file="./results/ELIvsSFI.csv",row.names=FALSE)
+```
+
+Si se observan los tes archivos excel, se puede ver que para muchos genes no hay anotación disponible aún. En ese caso, el valor de las columnas _Symbol_ y _Genename_ será NA; una buena continuación de este estudio sería hacer la __anotación de novo__ de estos genes para los que aún no existe anotación.
+
+Los resultados de las tablas de selección junto a las anotaciones se pueden visualizar a través de un gráfico llamado __volcano plot__. En este gráfico se representa en el eje de abscisas los cambios de expresión en escala logarítmica; mientras que en el eje de ordenadas se representa la significancia del gen a través del estadístico B en escala logarítmica. En este caso se representan los cuatro primeros genes más diferencialmente expresados de cada tabla.
+
+Los tres volcanos se recogen en el archivo _Volvanos.pdf_ del directorio __figures__.
+
+```{r fig.cap="Volcanoplot para el contraste ELI vs NIT.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+signif_ELIvsNIT <- -log10(results.annotated_ELIvsNIT$FDR)
+plot(results.annotated_ELIvsNIT$logFC,signif_ELIvsNIT,pch=16, main= "Genes diferencialmente expresados en ELIvsNIT", xlab= "logFC", ylab= "Significancia")
+points(results.annotated_ELIvsNIT[detags_ELIvsNIT,"logFC"],-log10(results.annotated_ELIvsNIT[detags_ELIvsNIT,"FDR"]),pch=16,col="red")
 ```
 
 
+```{r fig.cap="Volcanoplot para el contraste SFI vs NIT.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+signif_SFIvsNIT <- -log10(results.annotated_SFIvsNIT$FDR)
+plot(results.annotated_SFIvsNIT$logFC,signif_SFIvsNIT,pch=16, main= "Genes diferencialmente expresados en SFIvsNIT", xlab= "logFC", ylab= "Significancia")
+points(results.annotated_SFIvsNIT[detags_SFIvsNIT,"logFC"],-log10(results.annotated_SFIvsNIT[detags_SFIvsNIT,"FDR"]),pch=16,col="red")
+```
+
+```{r fig.cap="Volcanoplot para el contraste ELI vs SFI.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+signif_ELIvsSFI <- -log10(results.annotated_ELIvsSFI$FDR)
+plot(results.annotated_ELIvsSFI$logFC,signif_ELIvsSFI,pch=16, main= "Genes diferencialmente expresados en ELIvsSFI", xlab= "logFC", ylab= "Significancia")
+points(results.annotated_ELIvsSFI[detags_ELIvsSFI,"logFC"],-log10(results.annotated_ELIvsSFI[detags_ELIvsSFI,"FDR"]),pch=16,col="red")
+```
+
+```{r Guardar los plots en un archivo pdf, include=FALSE}
+pdf("figures/Volcanos.pdf")
+plot(results.annotated_ELIvsNIT$logFC,signif_ELIvsNIT,pch=16, main= "Genes diferencialmente expresados en ELIvsNIT", xlab= "logFC", ylab= "Significancia")
+points(results.annotated_ELIvsNIT[detags_ELIvsNIT,"logFC"],-log10(results.annotated_ELIvsNIT[detags_ELIvsNIT,"FDR"]),pch=16,col="red")
+plot(results.annotated_SFIvsNIT$logFC,signif_SFIvsNIT,pch=16, main= "Genes diferencialmente expresados en SFIvsNIT", xlab= "logFC", ylab= "Significancia")
+points(results.annotated_SFIvsNIT[detags_SFIvsNIT,"logFC"],-log10(results.annotated_SFIvsNIT[detags_SFIvsNIT,"FDR"]),pch=16,col="red")
+plot(results.annotated_ELIvsSFI$logFC,signif_ELIvsSFI,pch=16, main= "Genes diferencialmente expresados en ELIvsSFI", xlab= "logFC", ylab= "Significancia")
+points(results.annotated_ELIvsSFI[detags_ELIvsSFI,"logFC"],-log10(results.annotated_ELIvsSFI[detags_ELIvsSFI,"FDR"]),pch=16,col="red")
+dev.off()
+```
+
+Para completar la visualización gráfica de la anotación, voy a representar el gen DE más significativo de cada lista para el que exista anotación y así poder verificar los niveles de expresión de este gen concreto en cada grupo. Para mirar la expresión agrupada utilizaré un gráfico de barras con los valores de expresión logarítmica normalizados en el objeto __y__ (y$counts).
+
+Para la lista _topTags_ de genes DE del contraste __ELIvsNIT__ el gen escogido es el correspondiente al número 6717, el cual corresponde al gen SRI. Para el contraste __ELIvsSFI__ será el gen cuyo _ENTREZID_ es 3388, que corresponde al gen ICR1; 
+y para el contraste __SFIvsNIT__ el identificador a representar es el 6708, que hace referencia al gen SPTA1.
+
+```{r fig.cap="Gráfico de barras de la expresión individual de los genes SRI, ICR1 y SPTA1.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
+library(RColorBrewer)
+par(mfrow=c(1,3))
+normCounts <- y$counts
+nice.col <- brewer.pal(6,name="Dark2")
+stripchart(normCounts["6717",]~group,vertical=TRUE,las=2,cex.axis=0.8,pch=16,cex=1.3,col=nice.col,method="jitter",ylab="Normalised log2 expression",main="    SRI")
+stripchart(normCounts["3388",]~group,vertical=TRUE,las=2,cex.axis=0.8,pch=16,cex=1.3,col=nice.col,method="jitter",ylab="Normalised log2 expression",main="    ICR1")
+stripchart(normCounts["6708",]~group,vertical=TRUE,las=2,cex.axis=0.8,pch=16,cex=1.3,col=nice.col,method="jitter",ylab="Normalised log2 expression",main="    SPTA1")
+```
+
+
+El resultado común en ambos contraste es que los tres genes analizados de manera individual tiene su mayor nivel de expresión en el __grupo ELI__ que corresponde con _extensos filtrados linfoides_ y la expresión más moderada se encuentra en el grupo __NIT__ que representa _tejidos no infiltrados_.
+Los gráficos se encuentran en el directorio __figures__ bajo el nombre _Stripchart_.
+
+```{r Guardar los Stripchart en un archivo tiif, include=FALSE}
+library(RColorBrewer)
+tiff("figures/Stripcharts.tiff")
+par(mfrow=c(1,3))
+normCounts <- y$counts
+nice.col <- brewer.pal(6,name="Dark2")
+stripchart(normCounts["6717",]~group,vertical=TRUE,las=2,cex.axis=0.8,pch=16,cex=1.3,col=nice.col,method="jitter",ylab="Normalised log2 expression",main="    SRI")
+stripchart(normCounts["3388",]~group,vertical=TRUE,las=2,cex.axis=0.8,pch=16,cex=1.3,col=nice.col,method="jitter",ylab="Normalised log2 expression",main="    ICR1")
+stripchart(normCounts["6708",]~group,vertical=TRUE,las=2,cex.axis=0.8,pch=16,cex=1.3,col=nice.col,method="jitter",ylab="Normalised log2 expression",main="    SPTA1")
+dev.off()
+```
+
+Para completar el proceso de anotación, añadiré las localizaciones genómicas de los genes DE seleccionados en cada contraste. Las localizaciones genómicas se encuentran en el paquete __TxDb.Hsapiens.UCSC.hg19.knownGene__ para el ser humano en este caso, pero existen otros paquetes correspondientes a las localizaciones genómicas de otros organismo. Todos los paquetes disponibles pueden consultarse en la web de __Bioconductor__.
+
+El primer paso es descargar el paquete que contiene las localizaciones genómicas para el _Homo Sapiens_.
+
+```{r Descarga del paquete de localizaciones genómicas, include=FALSE}
+BiocManager::install("TxDb.Hsapiens.UCSC.hg19.knownGene")
+```
+
+Para ahorrarme escribir el largo nombre del paquete, lo guardaré en una variable llamada __tx__ y, además, compruebo las columnas disponibles en el paquete para escoger algunas de ellas como información de la posición de los genes de estudio.
+
+```{r Creación del objeto tx y verificación de las columnas disponibles, include=FALSE}
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+tx <- TxDb.Hsapiens.UCSC.hg19.knownGene
+columns(tx)
+```
+
+Para seguir con el ejemplo anterior, escogeré de nuevo los tres genes representados en el _Stripchart_. En esta ocasión creo una variable llamada __posiciones__ donde se guardan las siguientes columnas: 
+
+    -GENEID: identificador numérico del gen
+    -EXONCHROM: identificador del cromosoma en el genoma
+    -EXONSTART: coordenada de inicio del exon del gen en el genoma
+    -EXONEND: coordenada de fin del exon del gen en el genoma
+    
+```{r}
+library(GenomicFeatures)
+keys<- c("6717","3388","6708")
+posiciones<- select(tx, keys=keys ,columns=c("EXONCHROM","EXONSTART","EXONEND"), keytype = "GENEID")
+```
+
+Para guardar los resultados, creo un data frame con __sólo los genes DE__. Los resultados se encuentran en forma de archivo excel en el directorio __results__ bajo los nombres de _sigGenes_.
+
+De los 22990 genes iniciales, son significativos para cada contraste:
+
+  __ELIvsNIT__: 2748 genes DE.
+  __ELIvsSFI__: 2470 genes DE.
+  __SFIvsNIT__: 41 genes DE.
+
+```{r Dataframe genes DE, include=FALSE}
+sigGenes_ELIvsNIT <- results.annotated_ELIvsNIT[detags_ELIvsNIT,]
+sigGenes_ELIvsSFI <- results.annotated_ELIvsSFI[detags_ELIvsSFI,]
+sigGenes_SFIvsNIT <- results.annotated_SFIvsNIT[detags_SFIvsNIT,]
+```
+
+```{r Registro de los resultados de los genes DE, echo=FALSE}
+write.csv(sigGenes_ELIvsNIT,file="./results/sigGenes_ELIvsNIT.csv",row.names=FALSE)
+write.csv(sigGenes_SFIvsNIT,file="./results/sigGenes_SFIvsNIT.csv",row.names=FALSE)
+write.csv(sigGenes_ELIvsSFI,file="./results/sigGenes_ELIvsSFI.csv",row.names=FALSE)
+```
+
 # 5. Búsqueda de patrones de expresión y agrupación de las muestras
 
-Para poder llevar a cabo un contraste entre más de dos grupos, recurrimos al __análisis unidireccional de varianza (ANOVA)__ para cada gen. Para ello, debemos crear primero una matriz de contrastes, donde cada columna representa un contraste entre dos grupos de interés. La matriz de contrastes se crea a partir de la función _makeContrasts_. 
+Para poder llevar a cabo un contraste entre más de dos grupos, recurrimos al __análisis unidireccional de varianza (ANOVA)__ para cada gen. Para ello, debemos crear primero una matriz de contrastes, donde cada columna representa un contraste entre dos grupos de interés. La matriz de contrastes se crea a partir de la función _makeContrasts_ y reune los tres mismos contrastes trabajados anteriormente.
+La matriz de contraste __con__ se ha registrado en el directorio __results__ como _cont.matrix_.
 
 ```{r Matriz de contrastes, echo=FALSE}
 con <- makeContrasts(
@@ -577,40 +722,53 @@ ELIvsNIT = ELI - NIT,
 ELIvsSFI = ELI - SFI, levels=design)
 print(con)
 ```
-
-La función _glmQLFTest_ lleva a cabo la prueba de cuasi-probabilidad (QL) del test F que se aplica para identificar los genes que se expresan diferencialmente entre los tres grupos. Esto combina las tres comparaciones por pares en un solo estadístico F y un p-valor. La lista de genes más significativos puede obtenerse con la función _topTags_.
-
-```{r Identificación de genes diferencialmente expresados, echo=FALSE}
-anov <- glmQLFTest(fit, contrast=con)
-topTags(anov)
+```{r Guardar la amtriz de contraste, include=FALSE}
+write.csv(con, file="./results/cont.matrix.csv")
 ```
 
-El número total de genes diferencialmente expresados en cada grupo a un FDR del 5% puede ser examinado con los tests de decisión gracias a la función _decideTests_.
+La función _glmQLFTest_ lleva a cabo la prueba de cuasi-probabilidad (QL) del test F que se aplica para identificar los genes que se expresan diferencialmente entre los tres grupos. Esto combina las tres comparaciones por pares en un solo estadístico F y un p-valor. La lista de genes más significativos puede obtenerse con la función _topTags_.
+Anteriormente había obtenido la lista _topTags_ para cada contraste individualmente y ahora he creado una única tabla donde se recogen los genes DE más significativos en los tres contrastes. Esta tabla se encuentra en el directorio __results__ como un archivo excel bajo el nombre _topTags_anov_.
+
+```{r Identificación de genes diferencialmente expresados, echo=FALSE}
+anov <- glmQLFTest(fit, contrast = con)
+topTags_anov<-topTags(anov)
+topTags_anov
+```
+
+```{r Registro de la tabla topTags, include=FALSE}
+write.csv(topTags_anov, file="./results/topTags_anov.csv")
+```
+
+El número total de genes diferencialmente expresados en cada grupo que tengan un FDR del 5% puede ser examinado con los tests de decisión gracias a la función _decideTests_.
 
 ```{r Resumen decideTests, echo=FALSE}
 genes.de <- decideTests(anov, p.value=0.05)
 summary(genes.de)
 ```
 
-El resultado anterior muestra que de los 22990 genes analizados (es el número de genes seleccionados tras la filtración), 2277 genes cambian su expresión, todos ellos aumentan su expresión.
-
+El resultado anterior muestra que de los 22990 genes analizados (es el número de genes seleccionados tras la filtración), 2277 genes cambian su expresión.
 
 # 6.Análisis de significación biológica
 
-El análisis de enriquecimiento biológico (GEA) sirve para interpretar los resultados de la expresión diferencial en un contexto biológico. Su objetivo es identificar las funciones, rutas metabólicas o procesos biológicos donde interviene los genes seleccionados como más diferencialmente expresados.
+El análisis de enriquecimiento biológico (GEA) sirve para interpretar los resultados de la expresión diferencial en un contexto biológico. Su objetivo es identificar las funciones, rutas metabólicas o procesos biológicos donde intervienen los genes más diferencialmente expresados.
 
-En este caso, se identificarán los términos GO que están sobrerrepresentados en los tres grupos: ELI, SFI y NIT. Esto es posible aplicando la función __goana__ a los resultados de expresión diferencial de estas comparaciones. Con la función __topGo__ obtendremos una tabla con los 20 términos GO más enriquecidos en los tres grupos.
+En este caso, se identificarán los términos GO que están sobrerrepresentados en los tres grupos: ELI, SFI y NIT. Esto es posible aplicando la función __goana__ a los resultados de expresión diferencial de estas comparaciones. Con la función __topGo__ obtendremos una tabla con los 20 términos GO más enriquecidos en los tres grupos. Esta tabla está registrada en el directorio __results__ como _topGO_.
 
 ```{r Gene Set Enrichment Analysis, include=FALSE}
 qlf <- glmQLFTest(fit, contrast=con)
 go <- goana(qlf, species = "Hs")
 ```
 
-```{r topTable GEO}
-topGO(go, n=20)
+```{r topTable GEO para los términos GO más enriquecidos, echo=FALSE}
+topGo<-topGO(go, n=20)
+print(topGo)
 ```
 
-Los nombres de las filas de la salida son los identificadores universales de los términos GO, con un término por fila. Para entender bien el resultado obtenido, haré una descripción de lo que representa cada columna de la tabla:
+```{r Registro de la tabla topGo, include=FALSE}
+write.csv(topGo, file="./results/topGo.csv")
+```
+
+Los nombres de las filas de la salida son los identificadores universales de los términos GO, con un término por fila. Para entender bien el resultado obtenido, haré una descripción de lo que representa cada columna de la tabla _topGo_:
 
   __Term__: Nombra los términos GO
   __Ont__: Conjunto de dominios o tipos de términos
@@ -622,7 +780,7 @@ Los nombres de las filas de la salida son los identificadores universales de los
           expresados
   __P.DE__: Contiene los valores p para la sobrerrepresentación del término GO en el                conjunto de genes
   
-La tabla de salida está ordenada por orden ascendente del p-valor.
+La tabla de salida está ordenada por orden ascendente del p-valor, es decir los términos más afectados están al inicio de la tabla.
 
 ## 6.1 Probando conjuntos de genes (Gene Set Testing)
 
@@ -636,14 +794,14 @@ cyt.go <- c("GO:0004896", "GO:0004879")
 term <- select(GO.db, keys=cyt.go, columns="TERM") 
 ```
 
-Construimos una lista de dos componentes, cada uno de los cuales es un vector de las identificaciones __Entrez__ de los genes para todos los genes anotados con uno de los términos GO. Luego convertimos las IDs de los genes en índices de fila del objeto _fit_ usando la función __ids2indices__.
+Construyo una lista de dos componentes, cada uno de los cuales es un vector de las identificaciones __Entrez__ de los genes para todos los genes anotados con uno de los términos GO. Luego convertimos las IDs de los genes en índices de fila del objeto _fit_ usando la función __ids2indices__.
 
 ```{r Lista de componentes de los GO seleccionados, include=FALSE}
 Rkeys(org.Hs.egGO2ALLEGS) <- cyt.go
 ind <- ids2indices(as.list(org.Hs.egGO2ALLEGS), row.names(fit))
 ```
 
-Procederemos a ejecutar el test __ROAST__ en los conjuntos de genes definidos para el contraste de interés. Supongamos que la comparación de interés es entre los grupos ELI (Extensive lymphoid infiltrates) y NIT (not infiltrated tissues). Usamos la función __fry__ para probar múltiples conjuntos de genes.
+Procedo a ejecutar el test __ROAST__ en los conjuntos de genes definidos para el contraste de interés. Supongamos que la comparación de interés es entre los grupos ELI (Extensive lymphoid infiltrates) y NIT (not infiltrated tissues). Usamos la función __fry__ para probar múltiples conjuntos de genes.
 
 ```{r test ROAST, echo=FALSE}
 con_ELIvsNIT <- makeContrasts(ELI-NIT, levels=design)
@@ -651,21 +809,28 @@ fr <- fry(y, index=ind, design=design, contrast=con_ELIvsNIT)
 fr
 ```
 
-Cada fila del objeto _fry_ corresponde a un único conjunto de genes; en este caso de cada término GO. Al igual que con la tabla _go_, explicaré cada columna de la tabla __fry__ para entenderla mejor:
+Cada fila del objeto _fr_ corresponde a un único conjunto de genes; en este caso de cada término GO. Al igual que con la tabla _go_, explicaré cada columna de la tabla __fr__ para entenderla mejor:
 
   __NGenes__: Número de genes en cada conjunto de genes
-  __Direction__: Es la dirección neta del cambio, esta se determina a partir de la                       importancia de los cambios en cada dirección
-  __PValue__: Sirve para determinar si la mayoría de los genes del conjunto se expresan               diferencialmente en la dirección especificada
-  __FDR__: Este estadístico se calcula a partir de los correspondientes p-valores en               todos los conjuntos
+  __Direction__: Es la dirección neta del cambio, esta se determina a partir de la importancia de los cambios en cada dirección
+  __PValue__: Sirve para determinar si la mayoría de los genes del conjunto se expresan diferencialmente en la dirección especificada
+  __FDR__: Este estadístico se calcula a partir de los correspondientes p-valores en todos los conjuntos
   __PValue.Mixed__: Prueba la expresión diferencial en cualquier dirección
 
-Para finalizar, se puede representar visualmente el resultado anterior a través de la función __barcodeplot__. Esta función permite visualizar los resultados de cualquier conjunto; en este caso, he escogido el conjunto de genes definido por _GO:0004896_.
+Para finalizar, se puede representar visualmente el resultado anterior a través de la función __barcodeplot__. Esta función permite visualizar los resultados de cualquier conjunto presente en la tabla _fr_; en este caso, he escogido el conjunto de genes definido por _GO:0004896_.
 
 Los genes están representados por barras y se clasifican de izquierda a derecha disminuyendo el cambio de pliegue, formando así el patrón de código de barras. La línea sobre el código de barras muestra el enriquecimiento local relativo de las barras verticales en cada parte del gráfico. Este gráfico en particular sugiere que la mayoría de los genes de este conjunto están down-regulated en el grupo ELI en comparación con el grupo NIT.
+El gráfico lo he guardado en el directorio __figures__ como _Barcodeplot_.
 
 ```{r BarcodePlot ELIvsNIT, echo=FALSE}
 res_ELIvsNIT <- glmQLFTest(fit, contrast=con_ELIvsNIT)
 barcodeplot(res_ELIvsNIT$table$logFC, ind[[1]], main=names(ind)[1])
+```
+
+```{r Registro del barcodeplot para el término GO:0004896, include=FALSE}
+tiff("./figures/Barcodeplot.tiff", res = 200, width = 4, height = 4, units = 'in')
+barcodeplot(res_ELIvsNIT$table$logFC, ind[[1]], main=names(ind)[1])
+dev.off()
 ```
 
 

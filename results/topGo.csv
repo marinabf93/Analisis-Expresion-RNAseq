@@ -1,0 +1,21 @@
+"","Term","Ont","N","DE","P.DE"
+"GO:0004896","cytokine receptor activity","MF",46,13,0.000275165768274855
+"GO:0014731","spectrin-associated cytoskeleton","CC",5,4,0.000395526093859003
+"GO:2000209","regulation of anoikis","BP",12,6,0.000435368848530673
+"GO:0004879","nuclear receptor activity","MF",21,8,0.000463871503766635
+"GO:0098531","transcription factor activity, direct ligand regulated sequence-specific DNA binding","MF",21,8,0.000463871503766635
+"GO:2000811","negative regulation of anoikis","BP",9,5,0.000742597284072484
+"GO:0071415","cellular response to purine-containing compound","BP",3,3,0.000892871088473794
+"GO:0071394","cellular response to testosterone stimulus","BP",3,3,0.000892871088473794
+"GO:0032754","positive regulation of interleukin-5 production","BP",6,4,0.00109596262451061
+"GO:0008091","spectrin","CC",6,4,0.00109596262451061
+"GO:0009755","hormone-mediated signaling pathway","BP",86,18,0.00115505873354936
+"GO:0003707","steroid hormone receptor activity","MF",24,8,0.00129191301063776
+"GO:0071383","cellular response to steroid hormone stimulus","BP",94,19,0.00132297674405091
+"GO:0032634","interleukin-5 production","BP",10,5,0.00136799705881075
+"GO:0032674","regulation of interleukin-5 production","BP",10,5,0.00136799705881075
+"GO:0071346","cellular response to interferon-gamma","BP",61,14,0.00159337810756167
+"GO:0043401","steroid hormone mediated signaling pathway","BP",68,15,0.00168338622333714
+"GO:0043276","anoikis","BP",15,6,0.00183172325300065
+"GO:0000122","negative regulation of transcription by RNA polymerase II","BP",261,40,0.00184221851705466
+"GO:0032870","cellular response to hormone stimulus","BP",262,40,0.00198123770236157

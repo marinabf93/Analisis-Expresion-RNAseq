@@ -1,0 +1,76 @@
+---
+title: "Anotación de los resultados"
+author: "Marina Ballesteros"
+date: "6/7/2020"
+output: html_document
+---
+
+```{r, topTabs2, echo=FALSE}
+topTags_ELIvsNIT <- topTags (fit, number=nrow(fit), coef="ELIvsNIT", adjust="fdr") 
+head(topTags_ELIvsNIT)
+```
+
+
+
+```{r GeneAnnotation, message=FALSE, warning=FALSE}
+annotatedTopTags <- function(topTags, anotPackage)
+{
+  topTags <- cbind(PROBEID=rownames(topTags), topTags)
+  myProbes <- rownames(topTags)
+  thePackage <- eval(parse(text = anotPackage))
+  geneAnots <- select(thePackage, myProbes, c("SYMBOL", "ENTREZID", "GENENAME"))
+  annotatedTopTag<- merge(x=geneAnots, y=topTags, by.x="PROBEID", by.y="PROBEID")
+return(annotatedTopTag)
+}
+```
+
+```{r annotateTopTags, results='hide', message=FALSE, include=FALSE}
+require(org.Hs.eg.db)
+topAnnotated_SFIvsNIT <- annotatedTopTags(topTags_ELIvsNIT,
+anotPackage="org.Hs.eg.db")
+```
+
+topAnnotated_Rosett20vsRosett0 <- annotatedTopTable(topTab_Rosett20vsRosett0,
+anotPackage="hgu133plus2.db")
+topAnnotated_p40vsNPC0 <- annotatedTopTable(topTab_p40vsNPC0,
+anotPackage="hgu133plus2.db")
+topAnnotated_NPC20vsNPC0 <- annotatedTopTable(topTab_NPC20vsNPC0,
+anotPackage="hgu133plus2.db")
+write.csv(topAnnotated_p40vsRosett0, file="./results/topAnnotated_p40vsRosett0.csv")
+write.csv(topAnnotated_Rosett20vsRosett0, file="./results/topAnnotated_Rosett20vsRosett0.csv")
+write.csv(topAnnotated_p40vsNPC0, file="./results/topAnnotated_p40vsNPC0.csv")
+write.csv(topAnnotated_NPC20vsNPC0, file="./results/topAnnotated_NPC20vsNPC0.csv")
+
+
+**Intento Annotation edgeR**
+
+```{r Guardamos los resultados de los topTags, echo=FALSE}
+results_ELIvsNIT <- as.data.frame(topTags(ELIvsNIT, n= Inf))
+results_SFIvsNIT <- as.data.frame(topTags(SFIvsNIT, n= Inf))
+results_ELIvsSFI <- as.data.frame(topTags(ELIvsSFI, n= Inf))
+```
+
+Anotación de los genes seleccionados con el genoma humano como referencia.
+
+```{r Anotación de los genes, echo=FALSE}
+library(org.Hs.eg.db)
+ann_ELIvsNIT <- select(org.Hs.eg.db,keys=rownames(results_ELIvsNIT),columns=c("ENTREZID","SYMBOL","GENENAME"))
+ann_SFIvsNIT <- select(org.Hs.eg.db,keys=rownames(results_SFIvsNIT),columns=c("ENTREZID","SYMBOL","GENENAME"))
+ann_ELIvsSFI <- select(org.Hs.eg.db,keys=rownames(results_ELIvsSFI),columns=c("ENTREZID","SYMBOL","GENENAME"))
+```
+
+Añado las anotaciones a la tabla topTags de los genes seleccionados.
+
+```{r Unión de la anotación a los resultados, echo=FALSE}
+results.annotated_ELIvsNIT <- cbind(results_ELIvsNIT, ann_ELIvsNIT)
+results.annotated_SFIvsNIT <- cbind(results_SFIvsNIT, ann_SFIvsNIT)
+results.annotated_ELIvsSFI <- cbind(results_ELIvsSFI, ann_ELIvsSFI)
+```
+
+Guardo los archivos en un archivo excel para cada contraste.
+
+```{r Registro de los resultados de anotación, echo=FALSE}
+write.csv(results.annotated_ELIvsNIT,file="./results/ELIvsNIT.csv",row.names=FALSE)
+write.csv(results.annotated_SFIvsNIT,file="./results/SFIvsNIT.csv",row.names=FALSE)
+write.csv(results.annotated_ELIvsSFI,file="./results/ELIvsSFI.csv",row.names=FALSE)
+```
