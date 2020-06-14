@@ -37,6 +37,12 @@ library(edgeR)
 counts <- readTargets("./data/counts.csv", sep=";")
 ```
 
+*Nota: antes de continuar con la selección de muestras, siguiendo los consejos del foro voy a eliminar la versión de ENSEMBL de cada anotación.
+
+```{r Limpieza códigos ENSEMBLE, include=FALSE}
+counts$X <- gsub("\\..*", "", counts$X, fixed = FALSE)
+```
+
 El siguiente paso es escoger 30 muestras dentro de las 292 muestras posibles, de manera que tengamos 10 muestras de cada uno de los tres grupos de tiroides. Para llevar a cabo esto, necesitamos seleccionar primero 10 muestras de cada grupo a través de la columna _group_ del archivo __targets.csv__. 
 La selección la haré con la función _subset_ del paqute __dplyr__; a continuación, para unir las 30 muestras utilizaré la función _Reduce_.
 
@@ -89,7 +95,7 @@ head(myCPM)
 
 Por regla general, se puede elegir un buen umbral mínimo de CPMs identificando el CPM que corresponde a un conteo de 10. Contrastando las tablas __counts_30__ y __myCPM__, se observa que el umbral en este caso es aproximadamente 0,15. Con la selección de genes que superen el umbral de 0,15 se obtiene una matriz lógica con los genes que han superado el umbral (TRUE) y los genes que estan por debajo del umbral (FALSE).
 
-```{r}
+```{r selecciòn de genes con el umbral myCPM>0.15, include=FALSE}
 # Seleccionamos los valores CPM mayores al umbral
 thresh <- myCPM > 0.15
 # Se crea una matriz lógica de TRUE y FALSE
@@ -100,7 +106,7 @@ Una vez he filtrado los genes, hago un resumen con los genes que tienen un valor
 
 Una vez los dos umbrales han sido aplicados, selecciono los genes con una mayor expresión y estos serán los únicos conteos que conservaré para posteriores análisis. En este caso partimos de 56202 genes y tan solo conservaré 22990 genes tras la filtración.
 
-```{r}
+```{r Selección de genes que superen el umbral, echo=FALSE}
 table(rowSums(thresh))
 # Mantengo los genes con al menos 10 TRUES en cada fila
 keep <- rowSums(thresh) >= 10
@@ -110,10 +116,10 @@ summary(keep)
 dim(counts.keep)
 ```
 
-Una vez he realizado el filtraje, debo convertir los conteos en un objeto de la clase __DEGList__; este objeto es propio del paquete _edgeR_ y sirve para almacenar datos de conteos con los parámetros que se consideren pertinentes. En este caso sólo añadiré como parámetro la clasificación de las muestras en el grupo correspondiente gracias al objeto _group_ creado junto con la tabla de conteos _counts_30_.
+Hasta aquí llega el proceso de filtraje, ahora debo convertir los conteos en un objeto de la clase __DEGList__; este objeto es propio del paquete _edgeR_ y sirve para almacenar datos de conteos con los parámetros que se consideren pertinentes. En este caso sólo añadiré como parámetro la clasificación de las muestras en el grupo correspondiente gracias al objeto _group_ creado junto con la tabla de conteos _counts_30_.
 
 ```{r Creación del objeto DEGList, include=FALSE}
-y <- DGEList(counts.keep, group = group, genes = counts)
+y <- DGEList(counts.keep, group = group)
 # Muestras del obtejo DEGList
 names(y)
 # Información del tamaño de las librerías en cada muestra
@@ -125,7 +131,7 @@ y$samples
 
 El objetivo del control de calidad es revelar posibles problemas técnicos u otros sesgos presentes en los datos. La mejor manera para llevar a cabo un control de calidad es de manera visual. El primer paso, por lo tanto, será representar los datos gráficamente. 
 
-El primer gráfico será una representación de los tamaños de la biblioteca con un gráfico de barras para ver si hay grandes discrepancias entre las muestras más fácilmente. 
+El primer gráfico será una representación de los tamaños de las distintas librerías con un gráfico de barras para ver si hay grandes discrepancias entre las muestras. 
 Para que la identificación de las muestras sea más fácil, he creado la variable __ShortName__ a partir del archivo _targets_30_ en el que se identifican las muestras con un nombre más corto que el nombre original.
 El gráfico quedará registrado en la carpeta __figures__ bajo el nombre _Barplot_librerias_.
 
@@ -144,7 +150,7 @@ dev.off()
 
 En el gráfico se aprecia que las dimensiones de las librerías varían entre 15 y 70 millones de conteos. Estas enormes diferencias en el tamaño de las librerías indica que una normalización de los datos es necesaria antes de llevar a cabo los análisis de expresión diferencial.
 
-Los datos de conteo no están distribuidos normalmente, así que si queremos examinar las distribuciones de los conteos en bruto necesitamos convertir los conteos en logaritmos. Una vez los conteos estén trnaformados en logaritmos, usaré gráficos de caja para comprobar la distribución de los recuentos leídos en la escala log2. La función __cpm__ me ayudará a obtener los recuentos log2 por millón, que se corrigen para los diferentes tamaños de las librerías. La función __cpm__ también añade un pequeño desplazamiento para evitar tomar el logaritmo de cero.
+Los datos de conteo no están distribuidos normalmente, así que si quiero examinar las distribuciones de los conteos en bruto necesito convertir los conteos en logaritmos. Una vez los conteos estén trnaformados en logaritmos, usaré gráficos de caja para comprobar la distribución de los recuentos leídos en la escala log2. La función __cpm__ me ayudará a obtener los recuentos log2 por millón, que se corrigen para los diferentes tamaños de las librerías. La función __cpm__ también añade un pequeño desplazamiento para evitar tomar el logaritmo de cero.
 
 ```{r fig.cap="Boxplot de las dsitribuciones de las librerías.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
 # Log2 de los CPM
@@ -157,8 +163,8 @@ title("Boxplots de los logCPMs (no normalizados)")
 ```
 
 
-De los 30 boxplots, vemos que en general las distribuciones de densidad de las intensidades logarítmicas brutas no son idénticas pero aún así no muy diferentes. Si una muestra está realmente muy por encima o por debajo de la línea horizontal azul, se necesitaría entonces investigar esa muestra más a fondo.
-Los puntos dibujados más allá de los extremos de las cajas corresponden a valores outliers. El Boxplot esta registrado en el directorio __figures__ bajo el nombre de _Boxplot_librerias_.
+De las 30 cajas, se observa que en general las distribuciones de densidad de las intensidades logarítmicas brutas no son idénticas pero aún así no muy diferentes. Si una muestra está realmente muy por encima o por debajo de la línea horizontal azul, se necesitaría entonces investigar esa muestra más a fondo. Los puntos dibujados más allá de los extremos de las cajas corresponden a valores outliers. 
+El Boxplot esta registrado en el directorio __figures__ bajo el nombre de _Boxplot_librerias_.
 
 ```{r saveBoxplot, echo=FALSE, results='hide'}
 #Guardo el boxplot en un archivo tiff en el directorio figures
@@ -183,8 +189,8 @@ hmcol = colorRampPalette(brewer.pal(9, "GnBu"))(16)
 cim(mat.dist, color = rev(hmcol), symkey = FALSE, margins = c(9, 9))
 ```
 
-En el _Heatmap_ no existe una clara agrupación entre los tres grupos, el grupo que más agrupado se encuentra es el _ELI_ en la parte inferior del eje y. Por el contrario, las muestras de los grupos _SFI_ y _NIT_ están entremezcladas.
-Según la escala de colores, el color azul representaría los genes que no han cambiado su expresión ; mientras que el color verde representa los genes que si han aumentado su expresión. Esto no hace indicar que en la inmensa mayoría de los casos, los genes de las diferentes muestras han sufrido un aumento en su expresión, veremos si esta predicción se corresponde más adelante con el análisis de expresión diferencial.
+En el _Heatmap_ no existe una clara agrupación entre los tres grupos, el grupo que más agrupado se encuentra es el _ELI_ en la parte inferior del eje Y. Por el contrario, las muestras de los grupos _SFI_ y _NIT_ están entremezcladas.
+Según la escala de colores, el color azul representaría los genes que no han cambiado su expresión ; mientras que el color verde representa los genes que si han aumentado su expresión. Esto me hace indicar que en la inmensa mayoría de los casos, los genes de las diferentes muestras han sufrido un aumento en su expresión, veré si esta predicción se corresponde más adelante con el análisis de expresión diferencial.
 
 ```{r SaveHeatmap, echo=FALSE, results='hide',fig.height=5, fig.width=5}
 #Guardo el Heatmap en un archivo tiff en el directorio figures
@@ -200,7 +206,7 @@ cim(mat.dist, color = rev(hmcol), symkey = FALSE, margins = c(9, 9))
 dev.off()
 ```
 
-Para acabar con este control de calidad visual, representaré un __Plot de componentes principales (PCA)__. Este tipo de gráficos es útil para visualizar el efecto global de las covariables experimentales y los efectos de los lotes. En este análisis, el plot PCA agrupa las muestras por grupos de los genes más significativamente desregulados. Debido a que en este estudio existe un único factor con tres niveles: SFI, NIT y ELI; debería haber una clara separación de las muestras en función de estos tres niveles.
+Para acabar con este control de calidad visual, representaré un __Plot de componentes principales (PCA)__. Este tipo de gráficos es útil para visualizar el efecto global de las covariables experimentales y los efectos de los lotes. En este análisis, el plot PCA agrupa las muestras por grupos de genes que más significativamente han cambiado su expresión. Debido a que en este estudio existe un único factor con tres niveles: SFI, NIT y ELI; debería haber una clara separación de las muestras en función de estos tres niveles.
 Para hacer el análisis de componentes principales necesito dos paquetes: __AnnotatedDataFrame__ y __DESeq__.
 
 ```{r Instalación de paquetes, include=FALSE}
@@ -238,30 +244,30 @@ En el gráfico de __análisis de componentes principales__ se ve una clara separ
 
 ## 3.3 Normalización de los datos
 
-Por último, procedemos a la __normalización__ de los datos filtrados. El paquete __edgeR__ se ocupa del análisis de la expresión diferencial más que de la cuantificación de los niveles de expresión. Es decir, se ocupa de los cambios relativos en los niveles de expresión entre las condiciones. Por esta razón, los problemas de normalización se plantean sólo en la medida en que los factores técnicos tienen efectos específicos en la muestra.
+Por último, procedo a la __normalización__ de los datos filtrados. El paquete __edgeR__ se ocupa del análisis de la expresión diferencial más que de la cuantificación de los niveles de expresión. Es decir, se ocupa de los cambios relativos en los niveles de expresión entre las condiciones. Por esta razón, los problemas de normalización se plantean sólo en la medida en que los factores técnicos tienen efectos específicos en la muestra.
 
 Hay dos factores técnicos que pueden afectar a los recuentos de lectura de expresión diferencial: 
   
-  __La profundidad de secuenciación de cada muestra de ARN__. El paquete _edgeR_ ajusta automáticamente cualquier análisis de expresión diferencial para variar las profundidades de secuenciación, representadas por diferentes tamaños de biblioteca.
-  __La producción total de ARN por célula__. Esto suele ser importante cuando un pequeño número de genes se expresan en gran medida en una muestra, pero no en otra. Este efecto provoca que los genes altamente expresados consuman una proporción sustancial del tamaño total de la biblioteca, lo que hace que los genes restantes no estén suficientemente muestreados en esa muestra.
+  __La profundidad de secuenciación de cada muestra de ARN__. El paquete _edgeR_ ajusta automáticamente cualquier análisis de expresión diferencial para variar las profundidades de secuenciación, representadas por diferentes tamaños de librería.
+  __La producción total de ARN por célula__. Esto suele ser importante cuando un pequeño número de genes se expresan en gran medida en una muestra, pero no en otra. Este efecto provoca que los genes altamente expresados consuman una proporción sustancial del tamaño total de la librería, lo que hace que los genes restantes no estén suficientemente muestreados en esa muestra.
   
-Como el primer factor se corrige automáticamente con el paquete _edgeR_, debemos corregir el segundo factor a través de la función __calcNormFactors__. Esta función encontrará un conjunto de factores de escala para los tamaños de las bibliotecas con el fin de minimizar los cambios de pliege entre las muestras para la mayoría de genes.
-El método por defecto para calcular estos factores de escala utiliza una media recortada de valores M (TMM) entre cada par de muestras. La multiplicación del tamaño original de la biblioteca por el factor de escala se llamará el tamaño efectivo de la biblioteca, que sustituye al tamaño original de la biblioteca en todos los análisis.
+Como el primer factor se corrige automáticamente con el paquete _edgeR_, debo corregir el segundo factor a través de la función __calcNormFactors__. Esta función encontrará un conjunto de factores de escala para los tamaños de las bibliotecas con el fin de minimizar los cambios de pliege entre las muestras para la mayoría de genes.
+El método por defecto para calcular estos factores de escala utiliza una media recortada de valores M (TMM) entre cada par de muestras. La multiplicación del tamaño original de la librería por el factor de escala se llamará el __tamaño efectivo de la librería__, que sustituye al tamaño original de la librería en todos los análisis.
 
-En este caso usaremos el método por defecto, Trimmed Mean of M-values (TMM); ya que observando un poco los datos del archivo _counts_30_ se ve que el recuento total de lecturas depende en gran medida de unas pocas transcripciones altamente expresadas.
+En este caso usaré el método por defecto, Trimmed Mean of M-values (TMM); ya que observando un poco los datos del archivo _counts_30_ se ve que el recuento total de lecturas depende en gran medida de unas pocas transcripciones altamente expresadas.
 
-```{r Normalización de la muestra, include=FALSE}
+```{r Normalización de la muestra, echo=FALSE}
 y <- calcNormFactors(y)
 y$samples
 ```
 
 Puede observarse que los factores de normalización han cambiado a través del último comando. Un factor de normalización inferior a uno indica que un pequeño número de genes de alto recuento monopoliza la secuencia, lo que hace que los recuentos de otros genes sean inferiores a lo que sería habitual dado el tamaño de la librería. Como resultado, el tamaño de la librería se reducirá, de forma análoga a la escalada de los recuentos al alza en esa librería. Por el contrario, un factor superior a uno aumenta el tamaño de la librería y equivale a reducir los recuentos.
 
-El rendimiento del procedimiento de normalización de la TMM puede examinarse mediante gráficos de diferencia media o __plot MD__. Estas grñaficas muestran la expresión media (media: eje x) frente a los cambios de logaritmo (diferencia: eje y).
+El rendimiento del procedimiento de normalización de la TMM puede examinarse mediante gráficos de diferencia media o __plot MD__. Estos gráficos muestran la expresión media (media: eje x) frente a los cambios de logaritmo (diferencia: eje y).
 
 El plot MD de pliegue se genera comparando la muestra 1:  _GTEX.111CU.0226.SM.5GZXC_  con una librería artificial construida a partir de la media de todas las demás muestras. He elegido la librería de la muestra 1 porque es una de las muestras con el factor de normalización más pequeño: 0.882. Para tener el ejemplo contrario, representaré igualmente la muestra _GTEX.13NZ9.1126.SM.5MR37_ la cual tiene uno de los factores de normalización más elevados: 1.156.
 
-Si trazamos gráficos de diferencia media usando la función __plotMD__ para estas muestras, deberíamos ser capaces de ver el problema del sesgo de composición. Usaremos los recuentos del archivo _logcounts_, que han sido normalizados para el tamaño de la biblioteca, pero no para el sesgo de composición y lo compararé con este mismo gráfico pero con los valores de _y_ después de la normalización. Lo ideal sería que en el _plotMD_ del objeto _y_ el grueso de los genes se centrara en un cambio de pliegue en torno a cero para ambas muestras, lo que indicaría que se ha eliminado con éxito cualquier sesgo de composición entre las librerías. 
+Si trazamos gráficos de diferencia media usando la función __plotMD__ para estas muestras, deberíamos ser capaces de ver el problema del sesgo de composición. Usaremos los recuentos del archivo _logcounts_, que han sido normalizados para el tamaño de la librería, pero no para el sesgo de composición y lo compararé con este mismo gráfico pero con los valores de _y_ después de la normalización. Lo ideal sería que en el _plotMD_ del objeto _y_ el grueso de los genes se centrara en un cambio de pliegue en torno a cero para ambas muestras, lo que indicaría que se ha eliminado con éxito cualquier sesgo de composición entre las librerías. 
 
 
 ```{r fig.cap="Plot MD para el logaritmo de los conteos, normalizados sólo para el tamaño de las librerías.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
@@ -328,14 +334,14 @@ Existe una clara agrupación entre los tres grupos, lo que muestra un efecto seg
   -El grupo __NIT__ (círculo azul) se concentra en la parte izquierda del gráfico
   -El grupo __SFI__ (triángulo verde) se acumula en la parte media-izquierda superior
 
-Tan sólo hay una muestra del grupo _ELI_ que se sitúa en la aprte del gráfico donde se concentra el grupo _NIT_. Podríamos considerar esta anomalía como un desviación aleatoria ya que solo es una muestra.
+Tan sólo hay una muestra del grupo _ELI_ que se sitúa en la parte del gráfico donde se concentra el grupo _NIT_. Podríamos considerar esta anomalía como un desviación aleatoria ya que solo es una muestra.
 
 # 3. Identificación de genes diferencialmente expresados
 
 ## 3.1 Matriz de diseño
 
 La matriz de diseño contiene los predictores para cada muestra; en la matriz se asigna un coeficiente a cada grupo. La matriz de diseño se crea a partir del _objeto y_ ya que contiene la información sobre el grupo experimental al que pertenece cada muestra. 
-En este análisis, nos interesan las diferencias entre los tres tipos de infiltración. Por lo tanto, creamos una matriz de diseño utilizando el factor _tipo de infiltración_. La función __model.matrix__ permite crear la matriz de diseño de manera sencilla, en esta matriz se asignarán 1 para indicar que la muestra pertenece a dicho grupo experimental y cero en los otros dos grupos. 
+En este análisis, lo interesante son las diferencias entre los tres tipos de infiltración. Por lo tanto, creo una matriz de diseño utilizando el factor _tipo de infiltración_. La función __model.matrix__ permite crear la matriz de diseño de manera sencilla, en esta matriz se asignarán 1 para indicar que la muestra pertenece a dicho grupo experimental y cero en los otros dos grupos. 
 La matriz de diseño se ha registrado en el directorio __results__ bajo el nombre _design.matrix_.
 
 ```{r Matriz de diseño, echo=FALSE}
@@ -355,9 +361,9 @@ write.csv(design, file = "./results/design.matrix.csv")
 El modelo probabilístico __Binomial Negativa__ es el elegido por el paquete __edgeR__ para modelar los datos de conteo. El primer paso será estimar la dispersión de cada tránscrito a partir de la variabilidad total para todos los genes.
 
 Para experimentos con un solo factor, como en este caso (tipo de infiltración) donde se buscan comparaciones por pares entre grupos, el paquete __edgeR__ utiliza el método de máxima probabilidad condicional ajustada por cuantiles (qCML). 
-El __método qCML__ es un enfoque clásico del paquete _edgeR_ que calcula la probabilidad condicionándose a los recuentos totales de cada etiqueta, y utiliza pseudocuentas después de ajustar los tamaños de las bibliotecas. Es decir, primero se estima la dispersión común o variabilidad total (common dispersion) y luego se estima la  dispersión gen a gen (dispersion Tagwise). Para cada una de estas estimaciones existe una función propia; sin embargo, usaré la función _estimateDisp_ capaz de calcular las dos dispersiones a la vez.
+El __método qCML__ es un enfoque clásico del paquete _edgeR_ que calcula la probabilidad condicionándose a los recuentos totales de cada etiqueta, y utiliza pseudocuentas después de ajustar los tamaños de las librerías. Es decir, primero se estima la dispersión común o variabilidad total (common dispersion) y luego se estima la  dispersión gen a gen (dispersion Tagwise). Para cada una de estas estimaciones existe una función propia; sin embargo, usaré la función _estimateDisp_ capaz de calcular las dos dispersiones a la vez.
 
-Entonces estimamos la dispersión del __modelo negativo binomial__ (NB) usando la función _estimateDisp_. La estimación se robustece contra los potenciales genes atípicos. Dicha función devuelve el objeto DGEList con entradas adicionales para las dispersiones NB estimadas para todos los genes. Estas estimaciones pueden ser visualizadas con el plotBCV, que muestra el coeficiente biológico de variación de cada gen.
+Entonces estimo la dispersión del __modelo negativo binomial__ (NB) usando la función _estimateDisp_. La estimación se robustece contra los potenciales genes atípicos. Dicha función devuelve el objeto DGEList con entradas adicionales para las dispersiones NB estimadas para todos los genes, como el coeficiente biológico de variación de cada gen (BCV).
 
 ```{r Estimación de la dispersión, echo=FALSE}
 # Calculo ambas dispersiones
@@ -370,7 +376,7 @@ BCV<- sqrt(y$common.dispersion)
 BCV
 ```
 
-La estimación de la dispersión nos da una dispersión común de 0.24 y se muestras igualmente la dispersión de cada gen, la cual se ve que varía hacia arriba o hacia abajo con respecto a la dispersión común. El __coeficiente de variación biológica (BCV)__ se ha calculado a través de la raíz cuadrada de la dispersión común, obteniendo un coeficiente BCV de 48,8%. 
+La estimación de la dispersión nos da una dispersión común de 0.24; además se muestra la dispersión de cada gen, la cual se ve que varía hacia arriba o hacia abajo con respecto a la dispersión común. El __coeficiente de variación biológica (BCV)__ se ha calculado a través de la raíz cuadrada de la dispersión común, obteniendo un coeficiente BCV de 48,8%. 
 
 El coeficiente BCV también puede estimarse gráficamente a través de la función __plotBCV__ junto a las dispersiones calculadas anteriormente; de este modo puede comprobarse si la dispersión común representa realmente la dispersión existente entre los genes. Estos gráficos se obtienen al representar la raíz cuadrada de las dispersiones estimadas frente al logaritmo en base 2 de las lecturas por millón.
 
@@ -379,7 +385,7 @@ plotBCV(y)
 ```
 
 El gráfico BCV representa las dispersiones estimadas gen a gen (dispersión tagwise) a partir de la dispersión común, representada por la línea roja. Cada punto en el gráfico representa un gen y la línea azul muestra la tendencia de variación biológica con el aumento de lecturas. 
-El gráfico indica que el coeficiente BCV es entorno a un 50%, el cual coincide con el coeficiente BCV calculado a través de la raíz cuadrada de la dispersión negativa binomial. La variación biológica entre las muestras del mismo grupo influye en el número de genes que se expresan diferencialmente es dicho grupo. Es decir, cuanto mayor sea la variación entre los tres grupos con respecto a la variación entre grupos, más fácil será detectar los genes que cambian su expresión.
+El gráfico indica que el coeficiente BCV es entorno a un 50%, el cual coincide con el coeficiente BCV calculado a través de la raíz cuadrada de la dispersión negativa binomial. La variación biológica entre las muestras del mismo grupo influye en el número de genes que se expresan diferencialmente en dicho grupo. Es decir, cuanto mayor sea la variación entre los tres grupos con respecto a la variación entre grupos, más fácil será detectar los genes que cambian su expresión.
 
 De manera general, un valor óptimo del coeficiente de variación biológico común entre 0.2 y 0.4 favorecería la detección de genes diferencialmente expresados; en este caso tenemos un coeficiente de 0.49, ligeramente superior al valor óptimo. Esto podría llevarnos a seleccionar menos genes DE de los que realmente hay.
 
@@ -390,8 +396,8 @@ plotBCV(y)
 dev.off()
 ```
 
-Luego pasamos al análisis de expresión diferencial estimando las dispersiones de cuasi-probabilidad (QL) alrededor de la tendencia de dispersión usando la función _glmQLFit_. Esta función devuelve un objeto DGEGLM al que llamamos __fit__ que contiene los valores estimados de los coeficientes GLM para cada gen, así como la tendencia de dispersión de la media ajustada de QL, las estimaciones de QL ajustadas y los grados de libertad previos (df). 
-Se recomienda utilizar el argumento "robust=TRUE" ya que identifica los genes que son atípicos de la tendencia de dispersión media NB; en este caso se identifican como genes atípicos las filas 2,8,9,10,12 y 13.
+Luego paso al análisis de expresión diferencial estimando las dispersiones de cuasi-probabilidad (QL) alrededor de la tendencia de dispersión usando la función _glmQLFit_. Esta función devuelve un objeto DGEGLM al que llamo __fit__ que contiene los valores estimados de los coeficientes GLM para cada gen, así como la tendencia de dispersión de la media ajustada de QL, las estimaciones de QL ajustadas y los grados de libertad previos (df). 
+Se recomienda utilizar el argumento "robust=TRUE" ya que identifica los genes que son atípicos de la tendencia de dispersión media NB.
 
 ```{r dispersiones QL, echo=FALSE}
 fit <- glmQLFit(y, design, robust=TRUE) 
@@ -413,7 +419,7 @@ dev.off()
 
 ## 3.3 Expresión diferencial
 
-En este estudio hay un interés en comparar los tres tipos de grupos entre sí, por lo que debemos hacer __tres contrastes__:
+En este estudio hay un interés en comparar los tres tipos de grupos entre sí, por lo que debo hacer __tres contrastes__:
 
   -SFI vs NIT
   -ELI vs NIT
@@ -561,7 +567,7 @@ No hay ningún gen DE común para esta pareja de contrastes.
 
 # 4. Anotación de los resultados
 
-El proceso de anotación consiste en relacionar los identificadores _ENTREZID_ de la primera columna de las tablas _topTags_ con información más fácil de manejar como el _Gene Symbol_ o _Gene Name_. El símbolo del gen y su descripción se añadirán a los resultados de las tablas gracias al paquete de anotación del genoma humano __org.Hs.eg.db__, el cual nos permite asociar los identificadores _ENTREZID_ de la primera columna de las tablas con el nombre y la descripción de los genes.
+El proceso de anotación consiste en relacionar los identificadores _ENTREZID_ de la primera columna de las tablas _topTags_ con información más fácil de manejar como el _Gene Symbol_ o _Gene Name_. El símbolo del gen y su descripción se añadirán a los resultados de las tablas gracias al paquete de anotación del genoma humano __org.Hs.eg.db__, el cual permite asociar los identificadores _ENTREZID_ de la primera columna de las tablas con el nombre y la descripción de los genes.
 
 ```{r Registro de los resultados de los topTags, echo=FALSE}
 results_ELIvsNIT <- as.data.frame(topTags(ELIvsNIT, n= Inf))
@@ -588,13 +594,13 @@ results.annotated_ELIvsSFI <- cbind(results_ELIvsSFI, ann_ELIvsSFI)
 
 Guardo los archivos en un archivo excel para cada contraste; de este modo las anotaciones de los genes seleccionados en cada contraste están disponibles en el directorio __results__.
 
-```{r Registro de los resultados de anotación, echo=FALSE}
-write.csv(results.annotated_ELIvsNIT,file="./results/ELIvsNIT.csv",row.names=FALSE)
-write.csv(results.annotated_SFIvsNIT,file="./results/SFIvsNIT.csv",row.names=FALSE)
-write.csv(results.annotated_ELIvsSFI,file="./results/ELIvsSFI.csv",row.names=FALSE)
+```{r Registro de los resultados de anotación, include=FALSE}
+write.csv(results.annotated_ELIvsNIT,file="./results/anotaciones_ELIvsNIT.csv",row.names=FALSE)
+write.csv(results.annotated_SFIvsNIT,file="./results/anotaciones_SFIvsNIT.csv",row.names=FALSE)
+write.csv(results.annotated_ELIvsSFI,file="./results/anotaciones_ELIvsSFI.csv",row.names=FALSE)
 ```
 
-Si se observan los tes archivos excel, se puede ver que para muchos genes no hay anotación disponible aún. En ese caso, el valor de las columnas _Symbol_ y _Genename_ será NA; una buena continuación de este estudio sería hacer la __anotación de novo__ de estos genes para los que aún no existe anotación.
+Si se observan los tres archivos excel, se puede ver que para muchos genes no hay anotación disponible aún. En ese caso, el valor de las columnas _Symbol_ y _Genename_ será NA; una buena continuación de este estudio sería hacer la __anotación de novo__ de estos genes para los que aún no existe anotación.
 
 Los resultados de las tablas de selección junto a las anotaciones se pueden visualizar a través de un gráfico llamado __volcano plot__. En este gráfico se representa en el eje de abscisas los cambios de expresión en escala logarítmica; mientras que en el eje de ordenadas se representa la significancia del gen a través del estadístico B en escala logarítmica. En este caso se representan los cuatro primeros genes más diferencialmente expresados de cada tabla.
 
@@ -778,7 +784,7 @@ Los nombres de las filas de la salida son los identificadores universales de los
   __N__: Número total de genes que se anotan en cada término GO
   __DE__: Número de genes correspondiente a dicho término GO que están diferencialmente 
           expresados
-  __P.DE__: Contiene los valores p para la sobrerrepresentación del término GO en el                conjunto de genes
+  __P.DE__: Contiene los valores p para la sobrerrepresentación del término GO en el conjunto de genes
   
 La tabla de salida está ordenada por orden ascendente del p-valor, es decir los términos más afectados están al inicio de la tabla.
 
@@ -822,7 +828,7 @@ Para finalizar, se puede representar visualmente el resultado anterior a través
 Los genes están representados por barras y se clasifican de izquierda a derecha disminuyendo el cambio de pliegue, formando así el patrón de código de barras. La línea sobre el código de barras muestra el enriquecimiento local relativo de las barras verticales en cada parte del gráfico. Este gráfico en particular sugiere que la mayoría de los genes de este conjunto están down-regulated en el grupo ELI en comparación con el grupo NIT.
 El gráfico lo he guardado en el directorio __figures__ como _Barcodeplot_.
 
-```{r BarcodePlot ELIvsNIT, echo=FALSE}
+```{r fig.cap="BarcodePlot ELI vs NIT.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
 res_ELIvsNIT <- glmQLFTest(fit, contrast=con_ELIvsNIT)
 barcodeplot(res_ELIvsNIT$table$logFC, ind[[1]], main=names(ind)[1])
 ```
@@ -831,6 +837,14 @@ barcodeplot(res_ELIvsNIT$table$logFC, ind[[1]], main=names(ind)[1])
 tiff("./figures/Barcodeplot.tiff", res = 200, width = 4, height = 4, units = 'in')
 barcodeplot(res_ELIvsNIT$table$logFC, ind[[1]], main=names(ind)[1])
 dev.off()
+```
+
+# 7. Setup
+
+El análisis se condujo en la versión de R:
+
+```{r SessionInfo, echo=FALSE}
+sessionInfo()
 ```
 
 
