@@ -30,6 +30,10 @@ El archivo _targets.csv_ es un resumen de cada experinecia donde aparecen inform
   
 El archivo _counts.csv_ contiene en sus columnas el nombre de las 292 muestras y cada fila pertenece a un gen diferente.
 
+```{r Instalación edgeR, include=FALSE}
+BiocManager::install("edgeR")
+```
+
 ```{r lectura de los archivos, include=FALSE}
 library(readr)
 targets <- read_csv("./data/targets.csv")
@@ -75,12 +79,6 @@ group<- c("NIT","NIT","ELI","NIT","NIT","NIT","NIT","NIT","SFI","NIT","NIT","NIT
 ## 2.1 Filtración de los genes
 
 Filtraremos los genes reteniendo sólo aquellos genes que se expresen en todas las muestras y con un número mínimo de contajes. El proceso de filtraje es muy importante ya que los genes con recuentos muy bajos en las librerías no proporcionan apenas pruebas de expresión diferencial y, además, interfieren de forma negativa en algunas aproximaciones estadísticas. En consecuecia, estos genes con bajos conteos reducen el poder de detección de los genes de expresión diferencial y por ello es importante eliminarlos.
-
-Para llevar a cabo el filtraje necesitamos el paquete __edgeR__ de Bioconductor.
-
-```{r Descarga del paquete edgeR, include=FALSE}
-BiocManager::install("edgeR")
-```
 
 Hay distintas formas de filtrar los genes de baja expresión pero antes se deben transformar los conteos con el fin de tener en una misma escala todas las muestras de un mismo estudio y evitar, así, diferencias debido al distinto tamaño de las librerías. La transformación se realizará con la conversión de los conteos a CPM (conteos por millón) a través de la función __cpm__.
 
@@ -178,6 +176,11 @@ dev.off()
 El siguiente gráfico que llevaré a cabo en este control de calidad visual es un __Mapa de color__. Este tipo de gráficos sirven para agrupar las muestras en base a algún método jerárquico. Por lo tanto, las muestras que se encuentren juntas serán las muestras más similares entre sí.
 El Hetatmap se ha registrado en el directorio __figures__ bajo en nombre de _Heatmap.png_.
 
+```{r Instalación de paquetes mixOmics y RColorBrewer, include=FALSE}
+BiocManager::install("mixOmics")
+BiocManager::install("RColorBrewer")
+```
+
 ```{r fig.cap="Mapa de color para cada muestra en cada grupo.", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center" }
 require(mixOmics)
 require(RColorBrewer)
@@ -202,7 +205,7 @@ colnames(mat.dist) = paste(colnames(mat.dist), sep = " : ")
 mat.dist = as.matrix(dist(t(mat.dist)))
 mat.dist = mat.dist/max(mat.dist)
 hmcol = colorRampPalette(brewer.pal(9, "GnBu"))(16)
-cim(mat.dist, color = rev(hmcol), symkey = FALSE, margins = c(9, 9))
+cim(mat.dist, color = rev(hmcol), symkey = FALSE, margins = c(0.05, 0.05))
 dev.off()
 ```
 
@@ -211,7 +214,7 @@ Para hacer el análisis de componentes principales necesito dos paquetes: __Anno
 
 ```{r Instalación de paquetes, include=FALSE}
 BiocManager::install("AnnotatedDataFrame")
-BiocManager::install("DESeq")
+BiocManager::install("DESeq2")
 ```
 
 Gracias al paquete __matrixStats__ puedo calcular la varianza para cada gen incluído en la matriz _logcounts_. Dicha varianza que me servirá como base para la creación del plot PCA con los genes que más han cambiado su expresión, ya que seleccionaré los genes por orden decreciente de su varianza.
@@ -228,7 +231,8 @@ pca = prcomp(t(logcounts[select, ]))
 La función __plotPCA__ realiza fácilmente el gráfico que buscamos.
 
 ```{r fig.cap="Plot PCA para el análisis de componentes principales", echo=FALSE, out.extra='', fig.height=5, fig.width=5, fig.align="center"}
-require(DESeq)
+require(DESeq2)
+require(mixOmics)
 annot = AnnotatedDataFrame(data = data.frame(group, row.names = colnames(logcounts)))
 expSet = new("ExpressionSet", exprs = as.matrix(logcounts), phenoData=annot) 
 plotPCA(expSet, intgroup = c("group"))
@@ -366,6 +370,7 @@ El __método qCML__ es un enfoque clásico del paquete _edgeR_ que calcula la pr
 Entonces estimo la dispersión del __modelo negativo binomial__ (NB) usando la función _estimateDisp_. La estimación se robustece contra los potenciales genes atípicos. Dicha función devuelve el objeto DGEList con entradas adicionales para las dispersiones NB estimadas para todos los genes, como el coeficiente biológico de variación de cada gen (BCV).
 
 ```{r Estimación de la dispersión, echo=FALSE}
+require(edgeR)
 # Calculo ambas dispersiones
 y <- estimateDisp(y, design, robust=TRUE)
 # Dispersión común
@@ -569,6 +574,10 @@ No hay ningún gen DE común para esta pareja de contrastes.
 
 El proceso de anotación consiste en relacionar los identificadores _ENTREZID_ de la primera columna de las tablas _topTags_ con información más fácil de manejar como el _Gene Symbol_ o _Gene Name_. El símbolo del gen y su descripción se añadirán a los resultados de las tablas gracias al paquete de anotación del genoma humano __org.Hs.eg.db__, el cual permite asociar los identificadores _ENTREZID_ de la primera columna de las tablas con el nombre y la descripción de los genes.
 
+```{r Instalación paquete genoma humano, include=FALSE}
+BiocManager::install("org.Hs.eg.db")
+```
+
 ```{r Registro de los resultados de los topTags, echo=FALSE}
 results_ELIvsNIT <- as.data.frame(topTags(ELIvsNIT, n= Inf))
 results_SFIvsNIT <- as.data.frame(topTags(SFIvsNIT, n= Inf))
@@ -636,7 +645,7 @@ points(results.annotated_ELIvsSFI[detags_ELIvsSFI,"logFC"],-log10(results.annota
 dev.off()
 ```
 
-Para completar la visualización gráfica de la anotación, voy a representar el gen DE más significativo de cada lista para el que exista anotación y así poder verificar los niveles de expresión de este gen concreto en cada grupo. Para mirar la expresión agrupada utilizaré un gráfico de barras con los valores de expresión logarítmica normalizados en el objeto __y__ (y$counts).
+Para reforzar la visualización gráfica de la anotación, voy a representar el gen DE más significativo de cada lista para el que exista anotación y así poder verificar los niveles de expresión de este gen concreto en cada grupo. Para mirar la expresión conjunta de cada gen seleccionado en los tres grupos utilizaré un gráfico de barras con los valores de expresión logarítmica normalizados en el objeto __y__ (y$counts).
 
 Para la lista _topTags_ de genes DE del contraste __ELIvsNIT__ el gen escogido es el correspondiente al número 6717, el cual corresponde al gen SRI. Para el contraste __ELIvsSFI__ será el gen cuyo _ENTREZID_ es 3388, que corresponde al gen ICR1; 
 y para el contraste __SFIvsNIT__ el identificador a representar es el 6708, que hace referencia al gen SPTA1.
@@ -760,7 +769,12 @@ El análisis de enriquecimiento biológico (GEA) sirve para interpretar los resu
 
 En este caso, se identificarán los términos GO que están sobrerrepresentados en los tres grupos: ELI, SFI y NIT. Esto es posible aplicando la función __goana__ a los resultados de expresión diferencial de estas comparaciones. Con la función __topGo__ obtendremos una tabla con los 20 términos GO más enriquecidos en los tres grupos. Esta tabla está registrada en el directorio __results__ como _topGO_.
 
+```{r Instalación del paquete GO.db, include=FALSE}
+BiocManager::install("GO.db")
+```
+
 ```{r Gene Set Enrichment Analysis, include=FALSE}
+require(GO.db)
 qlf <- glmQLFTest(fit, contrast=con)
 go <- goana(qlf, species = "Hs")
 ```
@@ -792,7 +806,7 @@ La tabla de salida está ordenada por orden ascendente del p-valor, es decir los
 
 Para profundizar un poco más en el análisis de enriquecimiento biológico, se puede utilizar la prueba del conjunto de genes de rotación: __ROAST__. Dado un conjunto de genes, podemos probar si la mayoría de los genes del conjunto están diferencialmente expresados a través del contraste o contrastes de interés. Es útil cuando el conjunto especificado contiene todos los genes involucrados en alguna vía o proceso.
 
-Para este caso concreto, me interesaré en dos términos GO relacionados con la actividad del receptor; puesto que son los dos primeros términos obtenidos en la tabla anterior. Cada término se usará para definir un conjunto que contenga todos los genes que están anotados con ese término.
+Para este caso concreto, me interesaré en dos términos GO relacionados con la actividad del receptor; puesto que son dos términos obtenidos en la tabla anterior. Cada término se usará para definir un conjunto que contenga todos los genes que están anotados con ese término.
 
 ```{r Selección de los conjuntos de genes, include=FALSE}
 library(GO.db)
@@ -802,7 +816,12 @@ term <- select(GO.db, keys=cyt.go, columns="TERM")
 
 Construyo una lista de dos componentes, cada uno de los cuales es un vector de las identificaciones __Entrez__ de los genes para todos los genes anotados con uno de los términos GO. Luego convertimos las IDs de los genes en índices de fila del objeto _fit_ usando la función __ids2indices__.
 
+```{r Instalación de GenomicFeatures, include=FALSE}
+BiocManager::install("GenomicFeatures")
+```
+
 ```{r Lista de componentes de los GO seleccionados, include=FALSE}
+require(GenomicFeatures)
 Rkeys(org.Hs.egGO2ALLEGS) <- cyt.go
 ind <- ids2indices(as.list(org.Hs.egGO2ALLEGS), row.names(fit))
 ```
